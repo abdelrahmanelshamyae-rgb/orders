@@ -124,6 +124,122 @@
     .sheet-animate {
       animation: sheetSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
+
+    /* Friendly usability refresh: clearer hierarchy, calmer spacing, and larger touch targets */
+    :root {
+      --bg-app: #F5F7F6;
+      --bg-header: rgba(250, 252, 251, 0.96);
+      --bg-card: #FFFFFF;
+      --bg-inner: #F4F8F7;
+      --border-soft: #E1EAE7;
+      --text-primary: #172B2A;
+      --text-secondary: #637371;
+      --accent-teal: #0F8B80;
+      --accent-teal-dark: #0B7169;
+    }
+    body.dark-mode {
+      --bg-app: #111A1B;
+      --bg-header: rgba(22, 32, 33, 0.96);
+      --bg-card: #1B292A;
+      --bg-inner: #243536;
+      --border-soft: #344748;
+      --text-primary: #F1F7F5;
+      --text-secondary: #A8B9B6;
+      --accent-teal: #2CC4B2;
+      --accent-teal-dark: #159889;
+    }
+    body { line-height: 1.55; }
+    #mainStickyHeader {
+      background: var(--bg-header);
+      border-color: var(--border-soft);
+      box-shadow: 0 8px 24px rgba(18, 42, 39, .06);
+    }
+    #mainStickyHeader > div { padding-top: 12px; padding-bottom: 12px; gap: 10px; }
+    #compactSheetTitle { font-size: 15px; letter-spacing: -.2px; }
+    #headerTotalSummaryText, #headerContactedProgressText { font-size: 11px; }
+    #mainSearchInput {
+      min-height: 48px;
+      padding-top: 11px;
+      padding-bottom: 11px;
+      border-radius: 16px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border-color: var(--border-soft);
+      font-size: 14px !important;
+      box-shadow: 0 2px 8px rgba(20, 40, 38, .035);
+    }
+    #mainSearchInput::placeholder { color: var(--text-secondary); opacity: .85; }
+    .mfilter-btn, #areaFilterPills button {
+      min-height: 38px;
+      padding-inline: 14px;
+      font-size: 12px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+    }
+    .ticket-card {
+      border-radius: 22px;
+      padding: 16px !important;
+      gap: 12px !important;
+      box-shadow: 0 5px 18px rgba(25, 50, 47, .055);
+    }
+    .ticket-card h2 { font-size: 18px !important; line-height: 1.4; }
+    .ticket-card button, .ticket-card a {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ticket-card [data-action="open-wa"] {
+      padding-inline: 16px;
+      font-size: 12px;
+      border-radius: 12px;
+    }
+    .ticket-card [data-action="copy-phone"],
+    .ticket-card [data-action="toggle-contacted"] {
+      min-height: 40px;
+      padding-inline: 12px;
+      border-radius: 12px;
+    }
+    .ticket-card > div:nth-of-type(2) { border-radius: 17px; }
+    #bottomNavBar {
+      background: var(--bg-header);
+      border-color: var(--border-soft);
+      box-shadow: 0 -8px 24px rgba(18, 42, 39, .07);
+    }
+    #bottomNavBar button {
+      min-height: 48px;
+      font-size: 12px;
+      border-radius: 14px;
+    }
+    #topQuickUploadBtn, #topClearPdfBtn, #topOpenToolsBtn, #compactReviewAlertBtn {
+      min-height: 38px;
+      padding-inline: 11px;
+      font-size: 11px;
+      border-radius: 12px;
+    }
+    button, a, input, select, textarea { outline-offset: 3px; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(15, 139, 128, .45);
+    }
+    @media (min-width: 640px) {
+      #mainStickyHeader > div { gap: 12px; }
+      #ordersContainer { padding-top: 20px; }
+      .ticket-card { padding: 18px !important; }
+    }
+    @media (max-width: 380px) {
+      #compactSheetTitle { max-width: 110px; }
+      #topOpenToolsLabel { display: none; }
+      .ticket-card { padding: 12px !important; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -136,7 +252,7 @@
 
   <!-- EYE-SOOTHING SCULPTED BENTO HEADER -->
   <header id="mainStickyHeader" class="sticky top-0 z-30 border-b browser-glass transition-colors">
-    <div class="max-w-xl mx-auto px-3 pt-2 pb-2 space-y-1.5">
+    <div class="max-w-2xl mx-auto px-3 pt-2 pb-2 space-y-1.5">
       <!-- Row 1: Compact Brand Medallion, Sheet Title & Sleek Small-Icon Actions -->
       <div class="flex items-center justify-between gap-1.5 flex-wrap">
         <div class="flex items-center gap-2 min-w-0">
@@ -316,7 +432,7 @@
   </section>
 
   <!-- PRIMARY VIEW: Sculpted Bento Delivery Ticket Cards -->
-  <main id="ordersContainer" class="max-w-xl mx-auto px-3.5 py-3 space-y-3"></main>
+  <main id="ordersContainer" class="max-w-2xl mx-auto px-3.5 py-3 space-y-3"></main>
 
   <!-- Responsive bottom sheet: Live Message Preview, Original PDF Crop & Instant Field Editor -->
   <div id="sourceInspectModal" class="hidden fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -425,7 +541,7 @@
 
   <!-- ULTRA-SLIM SINGLE-LINE BOTTOM NAVIGATION BAR -->
   <nav id="bottomNavBar" class="fixed bottom-0 inset-x-0 z-40 border-t browser-bottom-nav transition-colors">
-    <div class="max-w-xl mx-auto px-2 pt-1 grid grid-cols-3 gap-1">
+    <div class="max-w-2xl mx-auto px-2 pt-1 grid grid-cols-3 gap-1">
       <button
         id="navSwitchViewBtn"
         type="button"
@@ -726,6 +842,26 @@
     function isPickupOrder(order) {
       const notesText = String(order.notes || '').trim();
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
+    }
+
+    // Open WhatsApp Business specifically (never fall back to the regular WhatsApp app).
+    function buildWhatsAppBusinessUrl(phone, message) {
+      const encodedMessage = encodeURIComponent(message || '');
+      const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+      const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+
+      if (/Android/i.test(ua)) {
+        // Android package name uniquely targets WhatsApp Business.
+        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end';
+      }
+      if (/(iPhone|iPad|iPod)/i.test(ua)) {
+        // iOS custom scheme targets WhatsApp Business only.
+        return 'whatsapp-business://send?' + query;
+      }
+
+      // Desktop: WhatsApp Web uses the account currently signed in by the user.
+      return 'https://web.whatsapp.com/send?' + query;
     }
 
     function buildWhatsAppMessage(order) {
@@ -1580,7 +1716,7 @@
         const primaryWaKey = order.seq + ':' + primaryPhoneInfo.intl;
         const primaryRegState = state.waRegStatus[primaryWaKey] || 'unknown';
         const primaryWaUrl = primaryPhoneInfo.valid
-          ? 'https://wa.me/' + primaryPhoneInfo.intl + '?text=' + encodeURIComponent(messageText)
+          ? buildWhatsAppBusinessUrl(primaryPhoneInfo.intl, messageText)
           : '';
 
         // Compact Small-Icon Capsule Thumb Buttons
@@ -1640,7 +1776,7 @@
                 <svg class="w-3 h-3 shrink-0 fill-current" viewBox="0 0 24 24">
                   <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.625.846 5.059 2.284 7.033l-1.492 5.448 5.601-1.469c1.908 1.263 4.195 1.988 6.607 1.988 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/>
                 </svg>
-                <span>واتساب</span>
+                <span>واتساب للأعمال</span>
               </a>
             </div>
           `;
@@ -1652,7 +1788,7 @@
           const allPhonesRow = audit.phonesList.map((rawP, idx) => {
             const pInfo = audit.phoneValidations[idx];
             const waUrl = pInfo.valid
-              ? 'https://wa.me/' + pInfo.intl + '?text=' + encodeURIComponent(messageText)
+              ? buildWhatsAppBusinessUrl(pInfo.intl, messageText)
               : '';
             const waKey = order.seq + ':' + pInfo.intl;
             const regState = state.waRegStatus[waKey] || 'unknown';
@@ -1672,7 +1808,7 @@
                 data-phone="${escapeHtml(pInfo.intl)}"
                 class="inline-flex items-center gap-1 text-[11px] font-extrabold px-3.5 py-1 rounded-full wa-btn-glow text-white no-underline num-ltr"
               >
-                <span>واتساب ${escapeHtml(pInfo.displayLocal)}</span>
+                <span>واتساب للأعمال ${escapeHtml(pInfo.displayLocal)}</span>
               </a>
             `;
           }).join('');
@@ -1926,11 +2062,11 @@
         const waKey = order.seq + ':' + pInfo.intl;
         const regState = state.waRegStatus[waKey] || 'unknown';
         const waUrl = pInfo.valid
-          ? 'https://wa.me/' + pInfo.intl + '?text=' + encodeURIComponent(msgText)
+          ? buildWhatsAppBusinessUrl(pInfo.intl, msgText)
           : '';
 
         if (audit.blocksWhatsApp) {
-          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب (${escapeHtml(pInfo.displayLocal)})</span>`;
+          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})</span>`;
         }
         if (regState === 'unregistered') {
           return `
@@ -1947,7 +2083,7 @@
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
           >
-            فتح واتساب (${escapeHtml(pInfo.displayLocal)})
+            فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})
           </a>
           <button
             type="button"
