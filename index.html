@@ -844,24 +844,32 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open WhatsApp Business specifically (never fall back to the regular WhatsApp app).
-    function buildWhatsAppBusinessUrl(phone, message) {
-      const encodedMessage = encodeURIComponent(message || '');
-      const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
-      const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
+    function getWhatsAppPlatform() {
       const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+      if (/Android/i.test(ua)) return 'android';
+      if (/(iPhone|iPad|iPod)/i.test(ua) ||
+          (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        return 'ios';
+      }
+      return 'desktop';
+    }
 
-      if (/Android/i.test(ua)) {
-        // Android package name uniquely targets WhatsApp Business.
+    function buildWhatsAppUrl(phone, message) {
+      const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+      const query = 'phone=' + cleanPhone + '&text=' + encodeURIComponent(message || '');
+      const platform = getWhatsAppPlatform();
+
+      if (platform === 'android') {
         return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end';
       }
-      if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        // iOS custom scheme targets WhatsApp Business only.
+      if (platform === 'ios') {
         return 'whatsapp-business://send?' + query;
       }
-
-      // Desktop: WhatsApp Web uses the account currently signed in by the user.
       return 'https://web.whatsapp.com/send?' + query;
+    }
+
+    function getWhatsAppLinkTarget() {
+      return getWhatsAppPlatform() === 'desktop' ? '_blank' : '_self';
     }
 
     function buildWhatsAppMessage(order) {
@@ -1716,7 +1724,7 @@
         const primaryWaKey = order.seq + ':' + primaryPhoneInfo.intl;
         const primaryRegState = state.waRegStatus[primaryWaKey] || 'unknown';
         const primaryWaUrl = primaryPhoneInfo.valid
-          ? buildWhatsAppBusinessUrl(primaryPhoneInfo.intl, messageText)
+          ? buildWhatsAppUrl(primaryPhoneInfo.intl, messageText)
           : '';
 
         // Compact Small-Icon Capsule Thumb Buttons
@@ -1766,7 +1774,7 @@
               </button>
               <a
                 href="${escapeHtml(primaryWaUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -1788,7 +1796,7 @@
           const allPhonesRow = audit.phonesList.map((rawP, idx) => {
             const pInfo = audit.phoneValidations[idx];
             const waUrl = pInfo.valid
-              ? buildWhatsAppBusinessUrl(pInfo.intl, messageText)
+              ? buildWhatsAppUrl(pInfo.intl, messageText)
               : '';
             const waKey = order.seq + ':' + pInfo.intl;
             const regState = state.waRegStatus[waKey] || 'unknown';
@@ -1801,7 +1809,7 @@
             return `
               <a
                 href="${escapeHtml(waUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -2062,7 +2070,7 @@
         const waKey = order.seq + ':' + pInfo.intl;
         const regState = state.waRegStatus[waKey] || 'unknown';
         const waUrl = pInfo.valid
-          ? buildWhatsAppBusinessUrl(pInfo.intl, msgText)
+          ? buildWhatsAppUrl(pInfo.intl, msgText)
           : '';
 
         if (audit.blocksWhatsApp) {
@@ -2078,7 +2086,7 @@
         return `
           <a
             href="${escapeHtml(waUrl)}"
-            target="_blank"
+            target="${getWhatsAppLinkTarget()}"
             rel="noopener noreferrer"
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
@@ -2124,7 +2132,8 @@
           }
           state.contactedSeqs[order.seq] = true;
           savePersistentState();
-          renderApp();
+          updateHeaderSummaryAndPills();
+          setTimeout(() => renderApp(), 0);
         });
       });
 
@@ -2336,8 +2345,8 @@
           }
           state.contactedSeqs[seq] = true;
           savePersistentState();
-          renderOrderCards();
           updateHeaderSummaryAndPills();
+          setTimeout(() => renderOrderCards(), 0);
         } else if (action === 'toggle-contacted' && order) {
           state.contactedSeqs[seq] = !state.contactedSeqs[seq];
           savePersistentState();
