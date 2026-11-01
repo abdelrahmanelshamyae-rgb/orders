@@ -1037,21 +1037,29 @@
       const imgW = imgSource.width;
       const imgH = imgSource.height;
       if (!imgW || !imgH || !layout.viewportWidth) return false;
+      const cropX0 = Math.max(0, Math.floor(
+        layout.columnBounds[0] / layout.viewportWidth * imgW
+      ));
+      const cropX1 = Math.min(imgW, Math.ceil(
+        layout.columnBounds[layout.columnBounds.length - 1] / layout.viewportWidth * imgW
+      ));
+      const cropWidth = cropX1 - cropX0;
+      if (cropWidth <= 0) return false;
       const padNorm = 0.003;
       const y0Norm = Math.max(0, order.y0_norm - padNorm);
       const y1Norm = Math.min(1, order.y1_norm + padNorm);
       const sy = Math.floor(y0Norm * imgH);
       const sh = Math.max(1, Math.min(imgH - sy, Math.ceil((y1Norm - y0Norm) * imgH)));
 
-      canvasEl.width = imgW;
+      canvasEl.width = cropWidth;
       canvasEl.height = sh;
       const ctx = canvasEl.getContext('2d');
       if (!ctx) return false;
-      ctx.drawImage(imgSource, 0, sy, imgW, sh, 0, 0, imgW, sh);
+      ctx.drawImage(imgSource, cropX0, sy, cropWidth, sh, 0, 0, cropWidth, sh);
       ctx.strokeStyle = 'rgba(13, 148, 136, 0.85)';
-      ctx.lineWidth = Math.max(1, imgW / 900);
+      ctx.lineWidth = Math.max(1, cropWidth / 900);
       layout.columnBounds.slice(1, -1).forEach(xPt => {
-        const xPx = (xPt / layout.viewportWidth) * imgW;
+        const xPx = (xPt / layout.viewportWidth) * imgW - cropX0;
         ctx.beginPath();
         ctx.moveTo(xPx, 0);
         ctx.lineTo(xPx, sh);
@@ -2634,8 +2642,8 @@
         return result && result.fieldsByColumn.filter(Boolean).length === 7 &&
           !result.fieldsByColumn.includes('merchant') && !result.fieldsByColumn.includes('recipient');
       });
-      check('استخدام إحداثيات جدول A4 فقط عند تحقق الصفحة وبيانات الهاتف والطلبية', () => {
-        const bounds = KNOWN_A4_COLUMNS.bounds;
+      check('استنتاج حدود الأعمدة من خطوط الجدول وبيانات الهاتف والطلبية', () => {
+        const bounds = Array.from({ length: 10 }, (_, idx) => idx * 100);
         const x = idx => (bounds[idx] + bounds[idx + 1]) / 2;
         const items = [
           { str: 'RXM2', x: x(5), y: 100 },
@@ -2646,8 +2654,59 @@
           { str: 'عجبان', x: x(1), y: 100 },
           { str: 'C1', x: x(7), y: 100 }
         ];
-        return Boolean(buildKnownA4Layout(595.32, 841.92, items)) &&
-          !buildKnownA4Layout(612, 792, items);
+        const inferred = buildGridFallbackLayout(1000, items, bounds, [40, 80, 120]);
+        const wrongColumns = Array.from({ length: 10 }, (_, idx) => idx * 80);
+        return Boolean(inferred && inferred.columnBounds.join('|') === bounds.join('|')) &&
+          !buildGridFallbackLayout(1000, items, wrongColumns, [40, 80, 120]);
+      });
+      check('اكتشاف حدود الجدول من خطوط مرئية مع وجود فراغ أبيض أسفل الجدول', () => {
+        const width = 240;
+        const height = 300;
+        const pixels = new Uint8ClampedArray(width * height * 4).fill(255);
+        for (let idx = 3; idx < pixels.length; idx += 4) pixels[idx] = 255;
+        const paint = (x, y) => {
+          const idx = (y * width + x) * 4;
+          pixels[idx] = 40;
+          pixels[idx + 1] = 130;
+          pixels[idx + 2] = 155;
+          pixels[idx + 3] = 255;
+        };
+        [20, 70, 120, 170, 220].forEach(x => {
+          for (let y = 20; y <= 200; y++) paint(x, y);
+        });
+        [20, 80, 140, 200].forEach(y => {
+          for (let x = 20; x <= 220; x++) paint(x, y);
+        });
+        const result = detectTableGridFromRenderedCanvas({
+          width, height,
+          getContext() { return { getImageData() { return { data: pixels }; } }; }
+        }, 1, width);
+        return result.vLinesPt.length === 5 && result.hLinesPt.length === 4 &&
+          result.hLinesPt[result.hLinesPt.length - 1] < height * 0.8;
+      });
+      check('قص صورة الصف بين حافتي الجدول بدل عرض عرض الصفحة كاملًا', () => {
+        const oldState = {
+          session: state.fileSessionId,
+          images: state.pageImages,
+          layouts: state.pageLayouts
+        };
+        state.fileSessionId = 'crop-test';
+        state.pageImages = { 1: { width: 200, height: 100 } };
+        state.pageLayouts = { 1: { viewportWidth: 200, columnBounds: [20, 60, 100, 140, 180] } };
+        let drawArgs = null;
+        const ctx = {
+          drawImage(...args) { drawArgs = args; },
+          beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}
+        };
+        const canvas = { width: 0, height: 0, getContext() { return ctx; } };
+        const drawn = drawOrderRowSliceOnCanvas({
+          page: 1, sourceSessionId: 'crop-test', y0_norm: 0.2, y1_norm: 0.4
+        }, canvas);
+        state.fileSessionId = oldState.session;
+        state.pageImages = oldState.images;
+        state.pageLayouts = oldState.layouts;
+        return drawn && canvas.width === 160 && drawArgs && drawArgs[1] === 20 &&
+          drawArgs[3] === 160 && drawArgs[5] === 0;
       });
       check('الحفاظ على رقمي هاتف داخل الخانة نفسها', () =>
         parsePhoneCell('569297784\n565724997').phones.join('|') === '569297784|565724997'
@@ -2709,30 +2768,32 @@
         state.fileSessionId = oldSession;
         return rows.length === 1 && rows[0].order_no === '10';
       });
-      check('استخراج صفوف A4 من عمود رقم الطلبية دون خطوط أفقية وتحديد نهاية الصف الأخير', () => {
-        const bounds = KNOWN_A4_COLUMNS.bounds;
+      check('استخراج صفوف الجدول من الحدود الأفقية وتحديد نهاية الصف الأخير', () => {
+        const bounds = Array.from({ length: 10 }, (_, idx) => idx * 100);
         const x = idx => (bounds[idx] + bounds[idx + 1]) / 2;
         const items = [];
         const addRow = (values, y) => Object.entries(values).forEach(([field, value]) => {
-          const idx = KNOWN_A4_COLUMNS.fields.indexOf(field);
+          const idx = GRID_FALLBACK_FIELDS.indexOf(field);
           items.push({ str: value, x: x(idx), x0: x(idx) - 5, x1: x(idx) + 5, y });
         });
         addRow({ order_no: '10', coupon: '7500287989', company: 'ADS', merchant: 'RXM2',
           recipient: 'ZS', phone: '552972077', total: '100', area: 'عجبان' }, 100);
         addRow({ order_no: '7', coupon: '7500287990', company: 'ADS', merchant: 'RXM2',
           recipient: 'MIRAL', phone: '547633730', total: '100', area: 'سويحان' }, 140);
+        addRow({ order_no: '11', coupon: 'C3', merchant: 'T3', phone: '551234567' }, 180);
         items.push({ str: 'إجمالي الكشف', x: 300, x0: 290, x1: 310, y: 200 });
-        const layout = buildKnownA4Layout(595.32, 841.92, items);
+        const layout = buildGridFallbackLayout(1000, items, bounds, [40, 80, 120, 160, 200, 220]);
         if (!layout) return false;
         layout.items = items;
-        layout.rowBands = buildRowBands(items, layout, [], 841.92);
+        layout.rowBands = buildRowBands(items, layout, [40, 80, 120, 160, 200, 220], 841.92);
         const oldSession = state.fileSessionId;
         state.fileSessionId = 'known-a4-test';
         const rows = extractRowsFromBands(layout.rowBands, items, layout, 1, 841.92, 1);
         state.fileSessionId = oldSession;
         return rows.length === 2 && rows[0].order_no === '10' &&
           rows[0].phone === '552972077' && rows[1].order_no === '7' &&
-          rows[1].phone === '547633730' && layout.rowBands[1].y1 < 200;
+          rows[1].phone === '547633730' && layout.rowBands[1].y1 < 200 &&
+          rows.every(order => order.structureConfident && !order.review_reason);
       });
       check('رسالة غير مدفوعة: المبلغ والسؤال دون اسم الشركة', () => {
         const message = buildWhatsAppMessage({ merchant: 'RXM2', company: 'ADS', phone: '569297784', total: 100, area: 'سويحان', notes: '' });
@@ -2855,43 +2916,50 @@
       const W = canvas.width;
       const H = canvas.height;
       const imgData = ctx.getImageData(0, 0, W, H).data;
-      const xStart = Math.floor(W * 0.015);
-      const xEnd = Math.floor(W * 0.985);
-      const spanW = Math.max(1, xEnd - xStart);
-      const hLineYsPx = [];
-      const yStart = Math.floor(H * 0.08);
-      const yEnd = Math.floor(H * 0.92);
+      const pageXStart = Math.floor(W * 0.005);
+      const pageXEnd = Math.ceil(W * 0.995);
+      const yStart = Math.floor(H * 0.02);
+      const yEnd = Math.ceil(H * 0.98);
       const vLineXsPx = [];
+
+      const isGridPixel = idx => {
+        const r = imgData[idx];
+        const g = imgData[idx + 1];
+        const b = imgData[idx + 2];
+        return (r < 155 && g < 215 && b < 230 && (g > r * 1.12 || b > r * 1.12)) ||
+          (r < 125 && g < 125 && b < 125);
+      };
+
+      const sampledHeight = Math.max(1, Math.ceil((yEnd - yStart) / 2));
+      for (let x = pageXStart; x < pageXEnd; x++) {
+        let count = 0;
+        for (let y = yStart; y < yEnd; y += 2) {
+          if (isGridPixel((y * W + x) * 4)) count++;
+        }
+        if (count / sampledHeight > 0.24) vLineXsPx.push(x);
+      }
+
+      const clusteredVerticals = cluster1DIndices(vLineXsPx, Math.ceil(3 * scale));
+      const tableXStart = clusteredVerticals.length >= 2
+        ? Math.max(pageXStart, Math.floor(clusteredVerticals[0] + 1))
+        : pageXStart;
+      const tableXEnd = clusteredVerticals.length >= 2
+        ? Math.min(pageXEnd, Math.ceil(clusteredVerticals[clusteredVerticals.length - 1] - 1))
+        : pageXEnd;
+      const sampledWidth = Math.max(1, tableXEnd - tableXStart);
+      const hLineYsPx = [];
 
       for (let y = 0; y < H; y++) {
         let count = 0;
-        const rowOffset = y * W * 4;
-        for (let x = xStart; x < xEnd; x += 2) {
-          const idx = rowOffset + x * 4;
-          const r = imgData[idx];
-          const g = imgData[idx + 1];
-          const b = imgData[idx + 2];
-          if ((r < 115 && g < 170 && b < 190) || (r < 165 && g < 165 && b < 165)) count++;
+        for (let x = tableXStart; x < tableXEnd; x++) {
+          if (isGridPixel((y * W + x) * 4)) count++;
         }
-        if (count / Math.max(1, spanW / 2) > 0.62) hLineYsPx.push(y);
-      }
-
-      const sampledHeight = Math.max(1, Math.ceil((yEnd - yStart) / 2));
-      for (let x = xStart; x < xEnd; x++) {
-        let count = 0;
-        for (let y = yStart; y < yEnd; y += 2) {
-          const idx = (y * W + x) * 4;
-          const r = imgData[idx];
-          const g = imgData[idx + 1];
-          const b = imgData[idx + 2];
-          if ((r < 115 && g < 170 && b < 190) || (r < 165 && g < 165 && b < 165)) count++;
-        }
-        if (count / sampledHeight > 0.2) vLineXsPx.push(x);
+        if (count / sampledWidth > 0.48) hLineYsPx.push(y);
       }
 
       return {
         hLinesPt: cluster1DIndices(hLineYsPx, Math.ceil(3 * scale)).map(yPx => yPx / scale),
-        vLinesPt: cluster1DIndices(vLineXsPx, Math.ceil(3 * scale)).map(xPx => xPx / scale),
+        vLinesPt: clusteredVerticals.map(xPx => xPx / scale),
         pageWidth: viewportWidth
       };
     }
@@ -3007,12 +3075,7 @@
       };
     }
 
-    const KNOWN_A4_COLUMNS = {
-      width: 595.32,
-      height: 841.92,
-      bounds: [17.0, 106.0, 154.5, 209.0, 301.0, 353.0, 429.5, 484.0, 554.0, 586.25],
-      fields: ['notes', 'area', 'total', 'phone', 'recipient', 'merchant', 'company', 'coupon', 'order_no']
-    };
+    const GRID_FALLBACK_FIELDS = ['notes', 'area', 'total', 'phone', 'recipient', 'merchant', 'company', 'coupon', 'order_no'];
 
     function getColumnTextLines(items, bounds, tolerance = 4) {
       const lines = [];
@@ -3035,32 +3098,42 @@
       }));
     }
 
-    function buildKnownA4Layout(pageWidth, pageHeight, items) {
-      const widthScale = pageWidth / KNOWN_A4_COLUMNS.width;
-      const heightScale = pageHeight / KNOWN_A4_COLUMNS.height;
-      if (Math.abs(widthScale - 1) > 0.015 || Math.abs(heightScale - 1) > 0.015) return null;
+    function buildGridFallbackLayout(pageWidth, items, verticalLines, horizontalLines) {
+      const boundsList = verticalLines
+        .filter((bound, idx, all) => idx === 0 || bound - all[idx - 1] > 4)
+        .sort((a, b) => a - b);
+      let best = null;
+      for (let start = 0; start + GRID_FALLBACK_FIELDS.length < boundsList.length; start++) {
+        const bounds = boundsList.slice(start, start + GRID_FALLBACK_FIELDS.length + 1);
+        const tableWidth = bounds[bounds.length - 1] - bounds[0];
+        if (tableWidth < pageWidth * 0.45 ||
+          bounds.some((bound, idx) => idx > 0 && bound - bounds[idx - 1] < 8)) continue;
+        const phoneIdx = GRID_FALLBACK_FIELDS.indexOf('phone');
+        const orderIdx = GRID_FALLBACK_FIELDS.indexOf('order_no');
+        const orderRows = getColumnTextLines(items, [bounds[orderIdx], bounds[orderIdx + 1]])
+          .filter(line => /^\d{1,5}$/.test(line.digits));
+        const phoneRows = getColumnTextLines(items, [bounds[phoneIdx], bounds[phoneIdx + 1]])
+          .filter(line => /^\d{7,15}$/.test(line.digits));
+        const matches = orderRows.filter(order =>
+          phoneRows.some(phone => Math.abs(phone.y - order.y) <= 28)
+        );
+        if (!matches.length) continue;
+        const score = matches.length * 100 - (orderRows.length - matches.length) * 20 - start * 0.001;
+        if (!best || score > best.score) best = { bounds, orderRows, matches, score };
+      }
+      if (!best) return null;
 
-      const bounds = KNOWN_A4_COLUMNS.bounds.map(bound => bound * widthScale);
-      const phoneLeft = bounds[3];
-      const phoneRight = bounds[4];
-      const orderLeft = bounds[8];
-      const orderRight = bounds[9];
-      const orderRows = getColumnTextLines(items, [orderLeft, orderRight])
-        .filter(line => /^\d{1,5}$/.test(line.digits));
-      const phoneRows = getColumnTextLines(items, [phoneLeft, phoneRight])
-        .filter(line => /^\d{8,12}$/.test(line.digits));
-      const hasMatchingRows = orderRows.some(order =>
-        phoneRows.some(phone => Math.abs(phone.y - order.y) <= 24)
-      );
-      if (!hasMatchingRows) return null;
-
+      const firstOrderY = Math.min(...best.matches.map(line => line.y));
+      const linesAboveFirstOrder = horizontalLines.filter(y => y < firstOrderY).sort((a, b) => a - b);
       return {
-        headerY: 0,
-        columnBounds: bounds,
-        fieldsByColumn: KNOWN_A4_COLUMNS.fields.slice(),
+        headerY: linesAboveFirstOrder.length > 1
+          ? linesAboveFirstOrder[linesAboveFirstOrder.length - 2]
+          : 0,
+        columnBounds: best.bounds,
+        fieldsByColumn: GRID_FALLBACK_FIELDS.slice(),
         headerCenters: [],
-        headerSignature: KNOWN_A4_COLUMNS.fields.join('|'),
-        knownGeometry: 'a4-orders-v1'
+        headerSignature: GRID_FALLBACK_FIELDS.join('|'),
+        gridFallback: true
       };
     }
 
@@ -3074,35 +3147,50 @@
       const lines = horizontalLines.filter(y => y > layout.headerY + 2);
       const left = fieldIndex >= 0 ? layout.columnBounds[fieldIndex] : 0;
       const right = fieldIndex >= 0 ? layout.columnBounds[fieldIndex + 1] : 0;
+      const phoneIndex = layout.fieldsByColumn.indexOf('phone');
+      const phoneBounds = phoneIndex >= 0
+        ? [layout.columnBounds[phoneIndex], layout.columnBounds[phoneIndex + 1]]
+        : [0, 0];
       const orderAnchors = getColumnTextLines(items, [left, right])
         .filter(line => line.y > layout.headerY + 3 && /^\d{1,5}$/.test(line.digits))
         .map(line => line.y)
         .sort((a, b) => a - b);
+      const phoneAnchors = phoneIndex >= 0
+        ? getColumnTextLines(items, phoneBounds)
+          .filter(line => /^\d{7,15}$/.test(line.digits))
+          .map(line => line.y)
+        : [];
+      const typicalGap = (() => {
+        const gaps = orderAnchors.slice(1).map((y, idx) => y - orderAnchors[idx]).filter(gap => gap >= 8);
+        return gaps.length ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 32;
+      })();
+      const maxIdentityDistance = Math.max(12, Math.min(28, typicalGap * 0.6));
+      const pairedOrderAnchors = orderAnchors.filter(y =>
+        phoneAnchors.some(phoneY => Math.abs(phoneY - y) <= maxIdentityDistance)
+      );
+      const hasPhoneAnchor = band => phoneAnchors.some(y => y >= band.y0 && y < band.y1);
       const gridBands = [];
       for (let i = 0; i < lines.length - 1; i++) {
         const band = { y0: lines[i], y1: lines[i + 1], confidence: true };
         const anchorsInBand = orderAnchors.filter(y => y >= band.y0 && y < band.y1).length;
-        if (band.y1 - band.y0 >= 4 && anchorsInBand === 1 && hasData(band)) gridBands.push(band);
+        if (band.y1 - band.y0 >= 4 && anchorsInBand === 1 && hasPhoneAnchor(band) && hasData(band)) {
+          gridBands.push(band);
+        }
       }
-      const gridHasAtMostOneOrderPerBand = gridBands.length > 0 && gridBands.every(band => {
-        return orderAnchors.filter(y => y >= band.y0 && y < band.y1).length === 1;
-      });
-      if (gridHasAtMostOneOrderPerBand) return gridBands;
+      const coveredOrderCount = pairedOrderAnchors.filter(y =>
+        gridBands.some(band => y >= band.y0 && y < band.y1)
+      ).length;
+      if (gridBands.length > 0 && coveredOrderCount === pairedOrderAnchors.length &&
+        gridBands.length === pairedOrderAnchors.length) return gridBands;
 
       if (fieldIndex < 0) return [];
-      const anchorYs = orderAnchors;
+      const anchorYs = pairedOrderAnchors;
       if (!anchorYs.length) return [];
-      const gaps = anchorYs.slice(1).map((y, idx) => y - anchorYs[idx]).filter(gap => gap >= 8);
-      const typicalGap = gaps.length
-        ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]
-        : 32;
       return anchorYs.map((y, idx) => ({
-        y0: idx === 0
-          ? Math.max(layout.headerY + 3, y - typicalGap * 0.55)
-          : (anchorYs[idx - 1] + y) / 2,
-        y1: idx === anchorYs.length - 1
-          ? Math.min(pageHeight, y + typicalGap * 0.55)
-          : (y + anchorYs[idx + 1]) / 2,
+        y0: lines.filter(line => line < y).slice(-1)[0] ??
+          Math.max(layout.headerY + 3, idx === 0 ? y - typicalGap * 0.45 : (anchorYs[idx - 1] + y) / 2),
+        y1: lines.find(line => line > y) ??
+          Math.min(pageHeight, idx === anchorYs.length - 1 ? y + typicalGap * 0.45 : (y + anchorYs[idx + 1]) / 2),
         confidence: false
       })).filter(hasData);
     }
@@ -3267,6 +3355,7 @@
         const parsedP = parsePhoneCell(phoneCellRaw);
         const rawTotal = normalizePdfDigits(cellText.total).replace(/[,،\s]/g, '');
         const totalVal = /^\d+(?:\.\d+)?$/.test(rawTotal) ? Number(rawTotal) : '';
+        if (totalVal === '' && !cellText.area) continue;
         const merchantRaw = cellText.merchant;
         const merchantClean = (merchantRaw === '*' ? '' : merchantRaw);
         const notes = cellText.notes;
@@ -3412,10 +3501,10 @@
 
           const { hLinesPt, vLinesPt } = detectTableGridFromRenderedCanvas(pageCanvas, renderScale, viewport.width);
           const detectedHeader = findHeaderLayout(items, viewport.width, vLinesPt);
-          const knownA4Layout = buildKnownA4Layout(viewport.width, viewport.height, items);
-          const baseLayout = knownA4Layout &&
+          const gridFallbackLayout = buildGridFallbackLayout(viewport.width, items, vLinesPt, hLinesPt);
+          const baseLayout = gridFallbackLayout &&
             (!detectedHeader || detectedHeader.fieldsByColumn.filter(Boolean).length < PDF_FIELDS.length)
-            ? knownA4Layout
+            ? gridFallbackLayout
             : detectedHeader || {
             headerY: 0,
             columnBounds: [0, viewport.width],
@@ -3423,12 +3512,12 @@
             headerCenters: [],
             headerSignature: ''
           };
-          if (!detectedHeader && !knownA4Layout) {
+          if (!detectedHeader && !gridFallbackLayout) {
             layoutErrors.push({ page: pageNum, reason: 'تعذر تحديد عناوين بعض الأعمدة تلقائيًا؛ لم تُنسب بياناتها إلى حقول بالتخمين' });
           }
           const detectedRowBands = detectedHeader
             ? buildRowBands(items, baseLayout, hLinesPt, viewport.height)
-            : knownA4Layout
+            : gridFallbackLayout
               ? buildRowBands(items, baseLayout, hLinesPt, viewport.height)
             : [];
           const autoRowsDetected = detectedRowBands.length > 0;
