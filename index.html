@@ -2634,6 +2634,21 @@
         return result && result.fieldsByColumn.filter(Boolean).length === 7 &&
           !result.fieldsByColumn.includes('merchant') && !result.fieldsByColumn.includes('recipient');
       });
+      check('استخدام إحداثيات جدول A4 فقط عند تحقق الصفحة وبيانات الهاتف والطلبية', () => {
+        const bounds = KNOWN_A4_COLUMNS.bounds;
+        const x = idx => (bounds[idx] + bounds[idx + 1]) / 2;
+        const items = [
+          { str: 'RXM2', x: x(5), y: 100 },
+          { str: '569297784', x: x(3), y: 100 },
+          { str: '10', x: x(8), y: 100 },
+          { str: 'ADS', x: x(6), y: 100 },
+          { str: '100', x: x(2), y: 100 },
+          { str: 'عجبان', x: x(1), y: 100 },
+          { str: 'C1', x: x(7), y: 100 }
+        ];
+        return Boolean(buildKnownA4Layout(595.32, 841.92, items)) &&
+          !buildKnownA4Layout(612, 792, items);
+      });
       check('الحفاظ على رقمي هاتف داخل الخانة نفسها', () =>
         parsePhoneCell('569297784\n565724997').phones.join('|') === '569297784|565724997'
       );
@@ -2693,6 +2708,31 @@
         ], items, layout, 1, 60, 1);
         state.fileSessionId = oldSession;
         return rows.length === 1 && rows[0].order_no === '10';
+      });
+      check('استخراج صفوف A4 من عمود رقم الطلبية دون خطوط أفقية وتحديد نهاية الصف الأخير', () => {
+        const bounds = KNOWN_A4_COLUMNS.bounds;
+        const x = idx => (bounds[idx] + bounds[idx + 1]) / 2;
+        const items = [];
+        const addRow = (values, y) => Object.entries(values).forEach(([field, value]) => {
+          const idx = KNOWN_A4_COLUMNS.fields.indexOf(field);
+          items.push({ str: value, x: x(idx), x0: x(idx) - 5, x1: x(idx) + 5, y });
+        });
+        addRow({ order_no: '10', coupon: '7500287989', company: 'ADS', merchant: 'RXM2',
+          recipient: 'ZS', phone: '552972077', total: '100', area: 'عجبان' }, 100);
+        addRow({ order_no: '7', coupon: '7500287990', company: 'ADS', merchant: 'RXM2',
+          recipient: 'MIRAL', phone: '547633730', total: '100', area: 'سويحان' }, 140);
+        items.push({ str: 'إجمالي الكشف', x: 300, x0: 290, x1: 310, y: 200 });
+        const layout = buildKnownA4Layout(595.32, 841.92, items);
+        if (!layout) return false;
+        layout.items = items;
+        layout.rowBands = buildRowBands(items, layout, [], 841.92);
+        const oldSession = state.fileSessionId;
+        state.fileSessionId = 'known-a4-test';
+        const rows = extractRowsFromBands(layout.rowBands, items, layout, 1, 841.92, 1);
+        state.fileSessionId = oldSession;
+        return rows.length === 2 && rows[0].order_no === '10' &&
+          rows[0].phone === '552972077' && rows[1].order_no === '7' &&
+          rows[1].phone === '547633730' && layout.rowBands[1].y1 < 200;
       });
       check('رسالة غير مدفوعة: المبلغ والسؤال دون اسم الشركة', () => {
         const message = buildWhatsAppMessage({ merchant: 'RXM2', company: 'ADS', phone: '569297784', total: 100, area: 'سويحان', notes: '' });
@@ -2967,6 +3007,59 @@
       };
     }
 
+    const KNOWN_A4_COLUMNS = {
+      width: 595.32,
+      height: 841.92,
+      bounds: [17.0, 106.0, 154.5, 209.0, 301.0, 353.0, 429.5, 484.0, 554.0, 586.25],
+      fields: ['notes', 'area', 'total', 'phone', 'recipient', 'merchant', 'company', 'coupon', 'order_no']
+    };
+
+    function buildKnownA4Layout(pageWidth, pageHeight, items) {
+      const widthScale = pageWidth / KNOWN_A4_COLUMNS.width;
+      const heightScale = pageHeight / KNOWN_A4_COLUMNS.height;
+      if (Math.abs(widthScale - 1) > 0.015 || Math.abs(heightScale - 1) > 0.015) return null;
+
+      const bounds = KNOWN_A4_COLUMNS.bounds.map(bound => bound * widthScale);
+      const phoneLeft = bounds[3];
+      const phoneRight = bounds[4];
+      const orderLeft = bounds[8];
+      const orderRight = bounds[9];
+      const rowYs = column => {
+        const selected = items.filter(item => item.x >= column[0] && item.x < column[1]);
+        const lines = [];
+        selected.forEach(item => {
+          let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 4);
+          if (!line) {
+            line = { y: item.y, items: [] };
+            lines.push(line);
+          }
+          line.items.push(item);
+          line.y = line.items.reduce((sum, entry) => sum + entry.y, 0) / line.items.length;
+        });
+        return lines.map(line => ({
+          y: line.y,
+          digits: line.items.map(item => normalizePdfDigits(item.str).replace(/\D/g, '')).join('')
+        }));
+      };
+      const orderRows = rowYs([orderLeft, orderRight])
+        .filter(line => /^\d{1,5}$/.test(line.digits));
+      const phoneRows = rowYs([phoneLeft, phoneRight])
+        .filter(line => /^\d{8,12}$/.test(line.digits));
+      const hasMatchingRows = orderRows.some(order =>
+        phoneRows.some(phone => Math.abs(phone.y - order.y) <= 24)
+      );
+      if (!hasMatchingRows) return null;
+
+      return {
+        headerY: 0,
+        columnBounds: bounds,
+        fieldsByColumn: KNOWN_A4_COLUMNS.fields.slice(),
+        headerCenters: [],
+        headerSignature: KNOWN_A4_COLUMNS.fields.join('|'),
+        knownGeometry: 'a4-orders-v1'
+      };
+    }
+
     function buildRowBands(items, layout, horizontalLines, pageHeight) {
       const fieldIndex = layout.fieldsByColumn.indexOf('order_no');
       const hasData = band => items.some(item =>
@@ -2975,34 +3068,39 @@
         item.x >= layout.columnBounds[0] && item.x <= layout.columnBounds[layout.columnBounds.length - 1]
       );
       const lines = horizontalLines.filter(y => y > layout.headerY + 2);
+      const left = fieldIndex >= 0 ? layout.columnBounds[fieldIndex] : 0;
+      const right = fieldIndex >= 0 ? layout.columnBounds[fieldIndex + 1] : 0;
+      const orderAnchors = cluster1DIndices(items
+        .filter(item => item.y > layout.headerY + 3 && fieldIndex >= 0 &&
+          item.x >= left && item.x < right &&
+          /^\d{1,5}$/.test(normalizePdfDigits(item.str).replace(/\D/g, '')))
+        .map(item => item.y)
+        .sort((a, b) => a - b), 4);
       const gridBands = [];
       for (let i = 0; i < lines.length - 1; i++) {
         const band = { y0: lines[i], y1: lines[i + 1], confidence: true };
-        if (band.y1 - band.y0 >= 4 && hasData(band)) gridBands.push(band);
+        const anchorsInBand = orderAnchors.filter(y => y >= band.y0 && y < band.y1).length;
+        if (band.y1 - band.y0 >= 4 && anchorsInBand === 1 && hasData(band)) gridBands.push(band);
       }
-      const left = fieldIndex >= 0 ? layout.columnBounds[fieldIndex] : 0;
-      const right = fieldIndex >= 0 ? layout.columnBounds[fieldIndex + 1] : 0;
       const gridHasAtMostOneOrderPerBand = gridBands.length > 0 && gridBands.every(band => {
-        const anchors = cluster1DIndices(items
-          .filter(item => item.y >= band.y0 && item.y < band.y1 &&
-            item.x >= left && item.x < right && /^\d+$/.test(normalizePdfDigits(item.str).replace(/\D/g, '')))
-          .map(item => item.y)
-          .sort((a, b) => a - b), 4);
-        return anchors.length <= 1;
+        return orderAnchors.filter(y => y >= band.y0 && y < band.y1).length === 1;
       });
       if (gridHasAtMostOneOrderPerBand) return gridBands;
 
       if (fieldIndex < 0) return [];
-      const anchors = items
-        .filter(item => item.y > layout.headerY + 3 && item.x >= left && item.x < right &&
-          /^\d+$/.test(normalizePdfDigits(item.str).replace(/\D/g, '')))
-        .map(item => item.y)
-        .sort((a, b) => a - b);
-      const anchorYs = cluster1DIndices(anchors, 4);
+      const anchorYs = orderAnchors;
       if (!anchorYs.length) return [];
+      const gaps = anchorYs.slice(1).map((y, idx) => y - anchorYs[idx]).filter(gap => gap >= 8);
+      const typicalGap = gaps.length
+        ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]
+        : 32;
       return anchorYs.map((y, idx) => ({
-        y0: idx === 0 ? layout.headerY + 3 : (anchorYs[idx - 1] + y) / 2,
-        y1: idx === anchorYs.length - 1 ? pageHeight : (y + anchorYs[idx + 1]) / 2,
+        y0: idx === 0
+          ? Math.max(layout.headerY + 3, y - typicalGap * 0.55)
+          : (anchorYs[idx - 1] + y) / 2,
+        y1: idx === anchorYs.length - 1
+          ? Math.min(pageHeight, y + typicalGap * 0.55)
+          : (y + anchorYs[idx + 1]) / 2,
         confidence: false
       })).filter(hasData);
     }
@@ -3300,18 +3398,24 @@
 
           const { hLinesPt, vLinesPt } = detectTableGridFromRenderedCanvas(pageCanvas, renderScale, viewport.width);
           const detectedHeader = findHeaderLayout(items, viewport.width, vLinesPt);
-          const baseLayout = detectedHeader || {
+          const knownA4Layout = buildKnownA4Layout(viewport.width, viewport.height, items);
+          const baseLayout = knownA4Layout &&
+            (!detectedHeader || detectedHeader.fieldsByColumn.filter(Boolean).length < PDF_FIELDS.length)
+            ? knownA4Layout
+            : detectedHeader || {
             headerY: 0,
             columnBounds: [0, viewport.width],
             fieldsByColumn: [''],
             headerCenters: [],
             headerSignature: ''
           };
-          if (!detectedHeader) {
+          if (!detectedHeader && !knownA4Layout) {
             layoutErrors.push({ page: pageNum, reason: 'تعذر تحديد عناوين بعض الأعمدة تلقائيًا؛ لم تُنسب بياناتها إلى حقول بالتخمين' });
           }
           const detectedRowBands = detectedHeader
-            ? buildRowBands(items, detectedHeader, hLinesPt, viewport.height)
+            ? buildRowBands(items, baseLayout, hLinesPt, viewport.height)
+            : knownA4Layout
+              ? buildRowBands(items, baseLayout, hLinesPt, viewport.height)
             : [];
           const autoRowsDetected = detectedRowBands.length > 0;
           const layout = {
