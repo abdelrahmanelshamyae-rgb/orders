@@ -305,13 +305,10 @@
             type="button"
             id="topOpenToolsBtn"
             class="text-[10px] font-extrabold px-2 py-1 rounded-full border transition active:scale-95 flex items-center gap-1"
-            title="فتح جدول المراجعة البصرية والأدوات"
+            title="فتح جدول المراجعة البصرية"
           >
             <span class="text-[10px] leading-none">🛡️</span>
-            <span id="topOpenToolsLabel">المراجعة والأدوات</span>
-          </button>
-          <button type="button" id="topLayoutEditorBtn" class="text-[10px] font-extrabold px-2 py-1 rounded-full border transition active:scale-95 flex items-center gap-1">
-            📐 <span id="topLayoutEditorLabel">ضبط الأعمدة</span>
+            <span id="topOpenToolsLabel">جدول المراجعة</span>
           </button>
 </div>
       </div>
@@ -440,9 +437,6 @@
       </div>
 
       <div class="flex items-center gap-1.5 flex-wrap">
-        <button id="openColumnLayoutEditorBtn" type="button" class="text-xs font-bold px-3 py-1.5 rounded-full bg-teal-500/15 text-teal-700 border border-teal-500/35">
-          📐 ضبط أعمدة كشف PDF
-        </button>
         <button
           id="toggleInlineCropsBtn"
           type="button"
@@ -2036,16 +2030,12 @@
 
     function renderPageIssuesNotice(isDark) {
       if (!state.layoutErrors.length) return '';
-      const issues = state.layoutErrors.map(issue => {
-        const canAdjust = Boolean(state.pageImages[issue.page] && state.pageLayouts[issue.page]);
-        return `<li class="flex items-center justify-between gap-2">
-          <span>الصفحة ${issue.page}: ${escapeHtml(issue.reason)}</span>
-          ${canAdjust ? `<button type="button" data-action="open-layout-page" data-page="${issue.page}" class="shrink-0 underline font-extrabold">ضبط الصفحة</button>` : ''}
-        </li>`;
-      }).join('');
+      const issues = state.layoutErrors.map(issue =>
+        `<li>الصفحة ${issue.page}: ${escapeHtml(issue.reason)}</li>`
+      ).join('');
       return `<aside class="col-span-full rounded-2xl border p-3 text-xs ${isDark ? 'bg-amber-950/40 border-amber-500/40 text-amber-100' : 'bg-amber-50 border-amber-300 text-amber-900'}">
         <strong>مراجعة صفحات محددة</strong>
-        <p class="mt-1">اُستخرجت الصفحات التي أمكن تحليلها؛ هذه الصفحات فقط تحتاج إلى مراجعة. لم تُستخدم بيانات تخمينية.</p>
+        <p class="mt-1">تعذر استخراج بعض البيانات من هذه الصفحات، فلم تُنشأ منها سجلات تخمينية. بقية الصفحات عولجت بشكل مستقل.</p>
         <ul class="mt-1 space-y-1">${issues}</ul>
       </aside>`;
     }
@@ -2504,17 +2494,7 @@
         const seq = Number(target.getAttribute('data-seq'));
         const order = ORDERS_DATA.find(o => o.seq === seq);
 
-        if (action === 'open-layout-page') {
-          const pageNum = Number(target.getAttribute('data-page'));
-          if (!state.pageImages[pageNum] || !state.pageLayouts[pageNum]) {
-            showToast('لا تتوفر معاينة لهذه الصفحة؛ بقيت طلبياتها المحتملة معزولة للمراجعة');
-            return;
-          }
-          state.layoutEditorPage = pageNum;
-          state.layoutEditorOpen = true;
-          renderApp();
-          renderLayoutEditor();
-        } else if (action === 'copy-msg' && order) {
+        if (action === 'copy-msg' && order) {
             if (evaluateOrderAudit(order).blocksWhatsApp) {
               showToast('تحتاج الطلبية إلى مراجعة وتأكيد قبل نسخ الرسالة');
               return;
@@ -2613,6 +2593,26 @@
         }));
         const result = findHeaderLayout(headers, 800);
         return result && result.fieldsByColumn.join('|') === PDF_FIELDS.slice().reverse().map(field => field.key).join('|');
+      });
+      check('تحويل إحداثيات PDF.js دون مضاعفة حجم الخط على موضع النص', () => {
+        const viewport = { transform: [1, 0, 0, -1, 0, 841], scale: 1 };
+        const pdfUtil = {
+          transform(matrix, transform) {
+            return [
+              matrix[0] * transform[0] + matrix[2] * transform[1],
+              matrix[1] * transform[0] + matrix[3] * transform[1],
+              matrix[0] * transform[2] + matrix[2] * transform[3],
+              matrix[1] * transform[2] + matrix[3] * transform[3],
+              matrix[0] * transform[4] + matrix[2] * transform[5] + matrix[4],
+              matrix[1] * transform[4] + matrix[3] * transform[5] + matrix[5]
+            ];
+          }
+        };
+        const mapped = mapPdfTextItem({
+          str: '502710111', width: 40, height: 10, transform: [10, 0, 0, 10, 100, 700]
+        }, 0, viewport, pdfUtil);
+        return Math.abs(mapped.x - 120) < 0.01 && Math.abs(mapped.y - 136) < 0.01 &&
+          Math.abs(mapped.x0 - 100) < 0.01 && Math.abs(mapped.x1 - 140) < 0.01;
       });
       check('استكمال عنوان واحد غير واضح من حدود الجدول الفعلية', () => {
         const physicalFields = PDF_FIELDS.slice().reverse();
@@ -3014,6 +3014,27 @@
       fields: ['notes', 'area', 'total', 'phone', 'recipient', 'merchant', 'company', 'coupon', 'order_no']
     };
 
+    function getColumnTextLines(items, bounds, tolerance = 4) {
+      const lines = [];
+      items.filter(item => item.x >= bounds[0] && item.x < bounds[1])
+        .slice()
+        .sort((a, b) => a.y - b.y || a.x - b.x)
+        .forEach(item => {
+          let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= tolerance);
+          if (!line) {
+            line = { y: item.y, items: [] };
+            lines.push(line);
+          }
+          line.items.push(item);
+          line.y = line.items.reduce((sum, entry) => sum + entry.y, 0) / line.items.length;
+        });
+      return lines.map(line => ({
+        y: line.y,
+        digits: line.items.slice().sort((a, b) => a.x - b.x)
+          .map(item => normalizePdfDigits(item.str).replace(/\D/g, '')).join('')
+      }));
+    }
+
     function buildKnownA4Layout(pageWidth, pageHeight, items) {
       const widthScale = pageWidth / KNOWN_A4_COLUMNS.width;
       const heightScale = pageHeight / KNOWN_A4_COLUMNS.height;
@@ -3024,26 +3045,9 @@
       const phoneRight = bounds[4];
       const orderLeft = bounds[8];
       const orderRight = bounds[9];
-      const rowYs = column => {
-        const selected = items.filter(item => item.x >= column[0] && item.x < column[1]);
-        const lines = [];
-        selected.forEach(item => {
-          let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 4);
-          if (!line) {
-            line = { y: item.y, items: [] };
-            lines.push(line);
-          }
-          line.items.push(item);
-          line.y = line.items.reduce((sum, entry) => sum + entry.y, 0) / line.items.length;
-        });
-        return lines.map(line => ({
-          y: line.y,
-          digits: line.items.map(item => normalizePdfDigits(item.str).replace(/\D/g, '')).join('')
-        }));
-      };
-      const orderRows = rowYs([orderLeft, orderRight])
+      const orderRows = getColumnTextLines(items, [orderLeft, orderRight])
         .filter(line => /^\d{1,5}$/.test(line.digits));
-      const phoneRows = rowYs([phoneLeft, phoneRight])
+      const phoneRows = getColumnTextLines(items, [phoneLeft, phoneRight])
         .filter(line => /^\d{8,12}$/.test(line.digits));
       const hasMatchingRows = orderRows.some(order =>
         phoneRows.some(phone => Math.abs(phone.y - order.y) <= 24)
@@ -3070,12 +3074,10 @@
       const lines = horizontalLines.filter(y => y > layout.headerY + 2);
       const left = fieldIndex >= 0 ? layout.columnBounds[fieldIndex] : 0;
       const right = fieldIndex >= 0 ? layout.columnBounds[fieldIndex + 1] : 0;
-      const orderAnchors = cluster1DIndices(items
-        .filter(item => item.y > layout.headerY + 3 && fieldIndex >= 0 &&
-          item.x >= left && item.x < right &&
-          /^\d{1,5}$/.test(normalizePdfDigits(item.str).replace(/\D/g, '')))
-        .map(item => item.y)
-        .sort((a, b) => a - b), 4);
+      const orderAnchors = getColumnTextLines(items, [left, right])
+        .filter(line => line.y > layout.headerY + 3 && /^\d{1,5}$/.test(line.digits))
+        .map(line => line.y)
+        .sort((a, b) => a - b);
       const gridBands = [];
       for (let i = 0; i < lines.length - 1; i++) {
         const band = { y0: lines[i], y1: lines[i + 1], confidence: true };
@@ -3153,6 +3155,32 @@
         const code = digit.charCodeAt(0);
         return String(code >= 0x06F0 ? code - 0x06F0 : code - 0x0660);
       });
+    }
+
+    function mapPdfTextItem(item, idx, viewport, pdfUtil) {
+      const tx = pdfUtil.transform(viewport.transform, item.transform);
+      const advanceLength = Math.hypot(tx[0], tx[1]) || 1;
+      const ascentLength = Math.hypot(tx[2], tx[3]) || 1;
+      const advanceX = tx[0] / advanceLength;
+      const advanceY = tx[1] / advanceLength;
+      const ascentX = tx[2] / ascentLength;
+      const ascentY = tx[3] / ascentLength;
+      const width = (Number(item.width) || 0) * viewport.scale;
+      const height = (Number(item.height) || ascentLength) * viewport.scale;
+      const corners = [
+        [tx[4], tx[5]],
+        [tx[4] + advanceX * width, tx[5] + advanceY * width],
+        [tx[4] + ascentX * height, tx[5] + ascentY * height],
+        [tx[4] + advanceX * width + ascentX * height, tx[5] + advanceY * width + ascentY * height]
+      ];
+      return {
+        str: String(item.str || '').trim(),
+        x: corners.reduce((sum, point) => sum + point[0], 0) / corners.length,
+        x0: Math.min(...corners.map(point => point[0])),
+        x1: Math.max(...corners.map(point => point[0])),
+        y: corners.reduce((sum, point) => sum + point[1], 0) / corners.length,
+        idx
+      };
     }
 
     function extractDeclaredSummary(items) {
@@ -3374,23 +3402,9 @@
           newPageImages[pageNum] = pageCanvas;
 
           const textContent = await page.getTextContent();
-          const items = textContent.items.map((item, idx) => {
-            const value = String(item.str || '').trim();
-            const tx = window.pdfjsLib.Util.transform(viewport.transform, item.transform);
-            const itemWidth = Number(item.width) || 0;
-            const itemHeight = Number(item.height) || 0;
-            const endX = tx[4] + tx[0] * itemWidth;
-            const centerX = tx[4] + tx[0] * itemWidth / 2 + tx[2] * itemHeight / 2;
-            const centerY = tx[5] + tx[1] * itemWidth / 2 + tx[3] * itemHeight / 2;
-            return {
-              str: value,
-              x: centerX,
-              x0: Math.min(tx[4], endX),
-              x1: Math.max(tx[4], endX),
-              y: centerY,
-              idx
-            };
-          }).filter(item => item.str);
+          const items = textContent.items
+            .map((item, idx) => mapPdfTextItem(item, idx, viewport, window.pdfjsLib.Util))
+            .filter(item => item.str);
 
           const summary = extractDeclaredSummary(items);
           if (summary.count !== null) declaredCount = summary.count;
@@ -3705,26 +3719,6 @@
       select.innerHTML = '<option value="">اختر قالبًا محفوظًا</option>' +
         templates.map((template, idx) => `<option value="${idx}">${escapeHtml(template.name)}</option>`).join('');
     }
-
-    document.getElementById('openColumnLayoutEditorBtn').addEventListener('click', function() {
-      if (!Object.keys(state.pageImages).length) {
-        showToast('ارفع ملف PDF أولًا لضبط أعمدته');
-        return;
-      }
-      state.layoutEditorOpen = true;
-      renderApp();
-      renderLayoutEditor();
-    });
-
-    document.getElementById('topLayoutEditorBtn').addEventListener('click', function() {
-      if (!Object.keys(state.pageImages).length) {
-        showToast('ارفع ملف PDF أولًا لضبط أعمدته');
-        return;
-      }
-      state.layoutEditorOpen = true;
-      renderApp();
-      renderLayoutEditor();
-    });
 
     document.getElementById('closeLayoutEditorBtn').addEventListener('click', function() {
       state.layoutEditorOpen = false;
