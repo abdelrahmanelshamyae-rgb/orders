@@ -1155,20 +1155,18 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open WhatsApp Business specifically (never fall back to the regular WhatsApp app).
-    function buildWhatsAppBusinessUrl(phone, message) {
+    // Open the regular WhatsApp app on mobile, or WhatsApp Web on desktop.
+    function buildWhatsAppUrl(phone, message) {
       const encodedMessage = encodeURIComponent(message || '');
       const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
       const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
       const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
 
       if (/Android/i.test(ua)) {
-        // Android package name uniquely targets WhatsApp Business.
-        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end';
+        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
       }
       if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        // iOS custom scheme targets WhatsApp Business only.
-        return 'whatsapp-business://send?' + query;
+        return 'whatsapp://send?' + query;
       }
 
       // Desktop: WhatsApp Web uses the account currently signed in by the user.
@@ -2030,7 +2028,7 @@
         const primaryWaKey = order.seq + ':' + primaryPhoneInfo.intl;
         const primaryRegState = state.waRegStatus[primaryWaKey] || 'unknown';
         const primaryWaUrl = primaryPhoneInfo.valid
-          ? buildWhatsAppBusinessUrl(primaryPhoneInfo.intl, messageText)
+          ? buildWhatsAppUrl(primaryPhoneInfo.intl, messageText)
           : '';
 
         // Compact Small-Icon Capsule Thumb Buttons
@@ -2092,7 +2090,7 @@
                 <svg class="w-3 h-3 shrink-0 fill-current" viewBox="0 0 24 24">
                   <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.625.846 5.059 2.284 7.033l-1.492 5.448 5.601-1.469c1.908 1.263 4.195 1.988 6.607 1.988 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/>
                 </svg>
-                <span>واتساب للأعمال</span>
+                <span>واتساب</span>
               </a>
             </div>
           `;
@@ -2104,7 +2102,7 @@
           const allPhonesRow = audit.phonesList.map((rawP, idx) => {
             const pInfo = audit.phoneValidations[idx];
             const waUrl = pInfo.valid
-              ? buildWhatsAppBusinessUrl(pInfo.intl, messageText)
+              ? buildWhatsAppUrl(pInfo.intl, messageText)
               : '';
             const waKey = order.seq + ':' + pInfo.intl;
             const regState = state.waRegStatus[waKey] || 'unknown';
@@ -2127,7 +2125,7 @@
                 data-phone="${escapeHtml(pInfo.intl)}"
                 class="inline-flex items-center gap-1 text-[11px] font-extrabold px-3.5 py-1 rounded-full wa-btn-glow text-white no-underline num-ltr"
               >
-                <span>واتساب للأعمال ${escapeHtml(pInfo.displayLocal)}</span>
+                <span>واتساب ${escapeHtml(pInfo.displayLocal)}</span>
               </a>
             `;
           }).join('');
@@ -2401,14 +2399,14 @@
         const waKey = order.seq + ':' + pInfo.intl;
         const regState = state.waRegStatus[waKey] || 'unknown';
         const waUrl = pInfo.valid
-          ? buildWhatsAppBusinessUrl(pInfo.intl, msgText)
+          ? buildWhatsAppUrl(pInfo.intl, msgText)
           : '';
 
         if (isCancelled) {
           return `<span class="text-[11px] font-extrabold text-rose-600 dark:text-rose-300">⛔ طلبية ملغاة — لن يتم فتح واتساب</span>`;
         }
         if (audit.blocksWhatsApp) {
-          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})</span>`;
+          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب (${escapeHtml(pInfo.displayLocal)})</span>`;
         }
         if (regState === 'unregistered') {
           return `
@@ -2425,7 +2423,7 @@
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
           >
-            فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})
+            فتح واتساب (${escapeHtml(pInfo.displayLocal)})
           </a>
           <button
             type="button"
