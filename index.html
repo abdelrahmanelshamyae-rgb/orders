@@ -499,6 +499,238 @@
       .ticket-card, button, a { transition: none !important; }
     }
 
+    /* Premium dark-only neon glass theme */
+    body.dark-mode {
+      color-scheme: dark;
+      --bg-app: #080d18;
+      --bg-card: #111d32;
+      --bg-inner: #172a45;
+      --border-soft: rgba(104,151,218,.22);
+      --text-primary: #f4f7ff;
+      --text-secondary: #9aacc9;
+      --accent-teal: #37d8ef;
+      background:
+        radial-gradient(ellipse at 12% 8%, rgba(20,114,235,.20), transparent 34%),
+        radial-gradient(ellipse at 92% 76%, rgba(117,54,191,.16), transparent 36%),
+        linear-gradient(145deg,#0c1629,#080e1b,#070b14) !important;
+      background-attachment: fixed;
+      color: var(--text-primary);
+    }
+
+    body.dark-mode #mainStickyHeader,
+    body.dark-mode #bottomNavBar {
+      background: rgba(8,16,31,.86) !important;
+      border-color: rgba(103,158,226,.20) !important;
+      box-shadow: 0 12px 38px rgba(0,0,0,.36),
+                  inset 0 1px 0 rgba(150,195,255,.07) !important;
+      backdrop-filter: blur(24px) saturate(170%);
+      -webkit-backdrop-filter: blur(24px) saturate(170%);
+    }
+
+    body.dark-mode #mainSearchInput,
+    body.dark-mode .mfilter-btn,
+    body.dark-mode #areaFilterPills button {
+      background: rgba(20,35,59,.82) !important;
+      color: #eaf3ff !important;
+      border: 1px solid rgba(100,160,230,.23) !important;
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04),
+                  0 7px 20px rgba(0,0,0,.16) !important;
+    }
+
+    body.dark-mode #mainSearchInput::placeholder {
+      color: #8da3c4 !important;
+    }
+
+    body.dark-mode .mfilter-btn.active,
+    body.dark-mode #areaFilterPills button.active {
+      border-color: rgba(51,211,238,.65) !important;
+      color: #68e8f5 !important;
+      box-shadow: 0 0 0 3px rgba(38,190,229,.10),
+                  0 0 18px rgba(38,190,229,.12) !important;
+    }
+
+    body.dark-mode .ticket-card {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      border: 1px solid rgba(102,157,226,.23) !important;
+      border-radius: 23px !important;
+      padding: 17px !important;
+      color: #f1f6ff !important;
+      background: linear-gradient(135deg, rgba(24,43,72,.96), rgba(13,24,43,.97)) !important;
+      box-shadow: 0 14px 34px rgba(0,0,0,.30),
+                  inset 0 1px 0 rgba(200,225,255,.08) !important;
+      backdrop-filter: blur(18px) saturate(145%);
+      -webkit-backdrop-filter: blur(18px) saturate(145%);
+      transition: all .2s ease;
+    }
+
+    body.dark-mode .ticket-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 2px;
+      z-index: -1;
+      background: linear-gradient(90deg, transparent, #37d8ef, #477dff, transparent);
+      pointer-events: none;
+    }
+
+    body.dark-mode .ticket-card:active {
+      transform: scale(.992);
+      border-color: rgba(55,216,239,.55) !important;
+    }
+
+    body.dark-mode .ticket-card h2 {
+      color: #f5f8ff !important;
+    }
+
+    body.dark-mode .ticket-card p,
+    body.dark-mode .ticket-card small {
+      color: #9fb1ce !important;
+    }
+
+    body.dark-mode .ticket-card > div:nth-of-type(2) {
+      background: linear-gradient(135deg, rgba(22,43,71,.92), rgba(15,29,51,.92)) !important;
+      border: 1px solid rgba(84,155,225,.20) !important;
+      border-radius: 18px !important;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    }
+
+    body.dark-mode .ticket-card [data-action="open-wa"] {
+      min-height: 44px;
+      padding: 9px 17px !important;
+      color: #fff !important;
+      background: linear-gradient(135deg, #168fe0, #2359d5) !important;
+      border: 1px solid rgba(137,205,255,.35) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 7px 22px rgba(30,113,226,.30),
+                  inset 0 1px 0 rgba(255,255,255,.18) !important;
+      font-size: 12px !important;
+      font-weight: 900 !important;
+      transition: all .2s ease;
+    }
+
+    body.dark-mode .ticket-card [data-action="open-wa"]:hover {
+      filter: brightness(1.12);
+      box-shadow: 0 9px 26px rgba(30,135,242,.38) !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-cancelled"] {
+      min-height: 42px;
+      padding: 8px 14px !important;
+      color: #ff9cac !important;
+      background: linear-gradient(135deg, rgba(126,34,57,.30), rgba(74,25,46,.48)) !important;
+      border: 1px solid rgba(255,99,132,.38) !important;
+      border-radius: 13px !important;
+      font-weight: 900 !important;
+      transition: all .2s ease;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-cancelled"][aria-pressed="true"] {
+      color: #fff !important;
+      background: linear-gradient(135deg, #f04b70, #b91f50) !important;
+      border-color: transparent !important;
+      box-shadow: 0 7px 20px rgba(220,38,85,.25) !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-contacted"] {
+      min-height: 42px;
+      padding: 8px 13px !important;
+      color: #72e6c0 !important;
+      background: rgba(17,143,111,.14) !important;
+      border: 1px solid rgba(65,220,174,.30) !important;
+      border-radius: 13px !important;
+      font-weight: 900 !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="copy-phone"],
+    body.dark-mode .ticket-card [data-action="copy-msg"],
+    body.dark-mode .ticket-card [data-action="toggle-msg-preview"] {
+      color: #dceaff !important;
+      background: rgba(33,55,86,.86) !important;
+      border: 1px solid rgba(106,162,229,.24) !important;
+      border-radius: 13px !important;
+    }
+
+    body.dark-mode .wa-btn-glow {
+      background: linear-gradient(135deg, #168fe0, #2359d5) !important;
+      box-shadow: 0 8px 22px rgba(30,113,226,.28) !important;
+    }
+
+    body.dark-mode .review-btn-glow {
+      color: #fff !important;
+      background: linear-gradient(135deg, #e8a13b, #c66b22) !important;
+      box-shadow: 0 7px 18px rgba(211,130,39,.22) !important;
+    }
+
+    body.dark-mode #sourceInspectModal {
+      background: rgba(2,7,17,.78) !important;
+    }
+
+    body.dark-mode #sourceInspectCard {
+      color: #f1f6ff !important;
+      background: linear-gradient(145deg, rgba(18,34,58,.98), rgba(9,18,34,.99)) !important;
+      border: 1px solid rgba(106,164,231,.25) !important;
+      box-shadow: 0 28px 90px rgba(0,0,0,.58) !important;
+    }
+
+    body.dark-mode #sourceInspectCard .modal-input {
+      color: #f1f6ff !important;
+      background: rgba(7,16,31,.78) !important;
+      border-color: rgba(107,162,225,.26) !important;
+    }
+
+    body.dark-mode #inspectEditForm button[type="submit"] {
+      min-height: 50px;
+      color: #fff !important;
+      background: linear-gradient(135deg, #168fe0, #2459d4) !important;
+      border-radius: 15px !important;
+      box-shadow: 0 8px 24px rgba(30,113,226,.30) !important;
+    }
+
+    body.dark-mode #modalWaActionsRow [data-modal-open-wa] {
+      color: #fff !important;
+      background: linear-gradient(135deg, #168fe0, #2359d5) !important;
+    }
+
+    body.dark-mode #reviewToolbar,
+    body.dark-mode #reviewTableWrapper {
+      background: rgba(17,29,50,.94) !important;
+      border-color: rgba(104,151,218,.22) !important;
+    }
+
+    body.dark-mode #reviewTableHeadRow {
+      background: rgba(29,49,77,.96) !important;
+      border-color: rgba(104,151,218,.22) !important;
+      color: #eaf3ff !important;
+    }
+
+    body.dark-mode #bottomNavBar button {
+      min-height: 47px !important;
+      border-radius: 14px !important;
+      font-weight: 900 !important;
+    }
+
+    body.dark-mode button:focus-visible,
+    body.dark-mode a:focus-visible,
+    body.dark-mode input:focus-visible,
+    body.dark-mode select:focus-visible,
+    body.dark-mode textarea:focus-visible {
+      outline: 2px solid rgba(55,216,239,.72) !important;
+      outline-offset: 3px !important;
+    }
+
+    @media (max-width: 420px) {
+      body.dark-mode .ticket-card {
+        padding: 14px !important;
+      }
+
+      body.dark-mode .ticket-card [data-action="open-wa"] {
+        padding-inline: 12px !important;
+      }
+    }
+
   </style>
 </head>
 <body class="min-h-screen">
