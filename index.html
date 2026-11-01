@@ -2814,6 +2814,39 @@
         return rows.length === 2 && rows[0].phone === '552972077' &&
           rows[1].phone === '547633730' && rows.every(row => !row.structureConfident);
       });
+      check('اكتشاف صف الطلبية من رقمها حتى إذا كان الهاتف فارغًا', () => {
+        const fields = GRID_FALLBACK_FIELDS;
+        const bounds = Array.from({ length: 10 }, (_, idx) => idx * 100);
+        const items = [];
+        const add = (field, value, y) => {
+          const x = (fields.indexOf(field) + 0.5) * 100;
+          items.push({ str: value, x, x0: x - 10, x1: x + 10, y });
+        };
+        add('order_no', '10', 100);
+        add('phone', '552972077', 100);
+        add('total', '100', 100);
+        add('area', 'عجبان', 100);
+        add('merchant', 'RXM2', 100);
+        add('coupon', 'C1', 100);
+        add('order_no', '7', 180);
+        add('total', '100', 180);
+        add('area', 'سويحان', 180);
+        add('merchant', 'RXM2', 180);
+        add('coupon', 'C2', 180);
+        const layout = {
+          headerY: 0,
+          columnBounds: bounds,
+          fieldsByColumn: fields,
+          mappingConfidence: true
+        };
+        const bands = buildRowBands(items, layout, [80, 140, 220], 260);
+        const oldSession = state.fileSessionId;
+        state.fileSessionId = 'missing-phone-anchor-test';
+        const rows = extractRowsFromBands(bands, items, layout, 1, 260, 1);
+        state.fileSessionId = oldSession;
+        return bands.length === 2 && rows.length === 2 &&
+          rows[1].order_no === '7' && !rows[1].phone && rows[1].review_reason.includes('الهاتف فارغ');
+      });
       check('توريث تخطيط صفحة سابقة فقط عند تطابق حدود الأعمدة ومراسي الصفوف', () => {
         const bounds = Array.from({ length: 10 }, (_, idx) => idx * 100);
         const fields = GRID_FALLBACK_FIELDS.slice();
@@ -2962,6 +2995,8 @@
         const r = imgData[idx];
         const g = imgData[idx + 1];
         const b = imgData[idx + 2];
+        const a = imgData[idx + 3];
+        if (a < 80) return false;
         return (r < 185 && g < 210 && b < 220 && (g - r > 12 || b - r > 18)) ||
           (r < 125 && g < 140 && b < 150);
       };
@@ -3284,15 +3319,9 @@
       const lines = horizontalLines.filter(y => y > layout.headerY + 2);
       if (fieldIndex < 0) return [];
       const orderBounds = [layout.columnBounds[fieldIndex], layout.columnBounds[fieldIndex + 1]];
-      const phoneIndex = layout.fieldsByColumn.indexOf('phone');
-      if (phoneIndex < 0) return [];
-      const phoneBounds = [layout.columnBounds[phoneIndex], layout.columnBounds[phoneIndex + 1]];
       const orderAnchors = getColumnTextLines(items, orderBounds, 6)
         .filter(line => line.y > layout.headerY + 3 && /^\d{1,5}$/.test(line.digits))
         .sort((a, b) => a.y - b.y);
-      const phoneAnchors = getColumnTextLines(items, phoneBounds, 6)
-        .filter(line => /^\d{7,15}$/.test(line.digits))
-        .map(line => line.y);
       if (!orderAnchors.length) return [];
 
       const gaps = orderAnchors.slice(1).map((anchor, idx) =>
@@ -3301,20 +3330,12 @@
       const typicalGap = gaps.length
         ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]
         : 24;
-      const maxIdentityDistance = Math.max(12, Math.min(28, typicalGap * 0.6));
-      const anchors = orderAnchors.filter(anchor =>
-        phoneAnchors.some(phoneY =>
-          Math.abs(phoneY - anchor.y) <= maxIdentityDistance ||
-          sameRowVertical(phoneY, anchor.y, lines)
-        )
-      );
-      if (!anchors.length) return [];
 
       const bands = [];
       const usedGridPairs = new Set();
-      anchors.forEach((anchor, index) => {
-        const previousAnchor = anchors[index - 1];
-        const nextAnchor = anchors[index + 1];
+      orderAnchors.forEach((anchor, index) => {
+        const previousAnchor = orderAnchors[index - 1];
+        const nextAnchor = orderAnchors[index + 1];
         const topLineIndex = lines.reduce((best, y, lineIndex) =>
           y <= anchor.y ? lineIndex : best, -1
         );
@@ -3325,14 +3346,13 @@
 
         if (topLineIndex >= 0 && bottomLineIndex > topLineIndex) {
           const pairKey = `${topLineIndex}:${bottomLineIndex}`;
-          const containsAnotherAnchor = anchors.some((other, otherIndex) =>
+          const containsAnotherAnchor = orderAnchors.some((other, otherIndex) =>
             otherIndex !== index &&
             other.y > lines[topLineIndex] &&
             other.y < lines[bottomLineIndex]
           );
-          const lineHeight = lines[bottomLineIndex] - lines[topLineIndex];
           if (!containsAnotherAnchor && !usedGridPairs.has(pairKey) &&
-            lineHeight >= 8 && lineHeight <= Math.max(typicalGap * 2.5, pageHeight * 0.35)) {
+            lines[bottomLineIndex] - lines[topLineIndex] >= 8) {
             y0 = lines[topLineIndex];
             y1 = lines[bottomLineIndex];
             usedGridPairs.add(pairKey);
@@ -3666,20 +3686,24 @@
           const { hLinesPt, vLinesPt } = detectTableGridFromRenderedCanvas(pageCanvas, renderScale, viewport.width);
           const detectedHeader = findHeaderLayout(items, viewport.width, vLinesPt);
           const gridFallbackLayout = buildGridFallbackLayout(viewport.width, items, vLinesPt, hLinesPt);
-          const inheritedLayout = !detectedHeader
+          const headerIsComplete = detectedHeader &&
+            detectedHeader.fieldsByColumn.filter(Boolean).length === PDF_FIELDS.length;
+          const inheritedLayout = !headerIsComplete
             ? buildInheritedLayout(viewport.width, items, previousPageLayout, hLinesPt, vLinesPt)
             : null;
-          const baseLayout = detectedHeader || inheritedLayout || gridFallbackLayout || {
+          const baseLayout = headerIsComplete
+            ? detectedHeader
+            : inheritedLayout || detectedHeader || gridFallbackLayout || {
             headerY: 0,
             columnBounds: [0, viewport.width],
             fieldsByColumn: [''],
             headerCenters: [],
             headerSignature: ''
           };
-          if (!detectedHeader && !inheritedLayout && !gridFallbackLayout) {
+          if (!headerIsComplete && !inheritedLayout && !detectedHeader && !gridFallbackLayout) {
             layoutErrors.push({ page: pageNum, reason: 'تعذر تحديد عناوين بعض الأعمدة تلقائيًا؛ لم تُنسب بياناتها إلى حقول بالتخمين' });
           }
-          const detectedRowBands = detectedHeader || inheritedLayout || gridFallbackLayout
+          const detectedRowBands = headerIsComplete || inheritedLayout || detectedHeader || gridFallbackLayout
             ? buildRowBands(items, baseLayout, hLinesPt, viewport.height)
             : [];
           const autoRowsDetected = detectedRowBands.length > 0;
