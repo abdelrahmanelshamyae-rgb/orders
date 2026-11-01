@@ -391,6 +391,8 @@
           <option value="">اختر حدًا لحذفه</option>
         </select>
         <button id="removeColumnBoundaryBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold">حذف الحد المحدد</button>
+        <button id="reanalyzeLayoutBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold">إعادة التحليل</button>
+        <button id="restoreAutoLayoutBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold">استعادة الحدود المكتشفة تلقائيًا</button>
         <button id="approvePageLayoutBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold bg-amber-500/15 text-amber-800">اعتماد تخطيط الصفحة بعد مراجعته</button>
         <select id="layoutRowSplitSelect" class="border rounded-xl px-3 py-2 bg-white text-slate-900">
           <option value="">اختر صفًا لإضافة حد</option>
@@ -400,6 +402,9 @@
           <option value="">اختر حدًا لحذفه</option>
         </select>
         <button id="removeRowBoundaryBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold">حذف الحد المحدد</button>
+        <button id="layoutZoomOutBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold" aria-label="تصغير المعاينة">−</button>
+        <span id="layoutZoomValue" class="text-xs font-bold num-ltr">100%</span>
+        <button id="layoutZoomInBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold" aria-label="تكبير المعاينة">+</button>
         <button id="saveLayoutTemplateBtn" type="button" class="border rounded-xl px-3 py-2 text-xs font-bold">حفظ التخطيط كقالب</button>
         <select id="layoutTemplateSelect" class="border rounded-xl px-3 py-2 bg-white text-slate-900">
           <option value="">اختر قالبًا محفوظًا</option>
@@ -669,10 +674,13 @@
       waRegStatus: {},
       pageImages: {},
       pageLayouts: {},
+      autoPageLayouts: {},
+      autoLayoutIssues: {},
       layoutErrors: [],
       fileSessionId: '',
       layoutEditorPage: 1,
       layoutEditorOpen: false,
+      layoutEditorZoom: 1,
       pdfDocument: null,
       draggingGuide: null
     };
@@ -713,6 +721,8 @@
       state.expandedMsgSeqs = {};
       state.pageImages = {};
       state.pageLayouts = {};
+      state.autoPageLayouts = {};
+      state.autoLayoutIssues = {};
       state.layoutErrors = [];
       state.fileSessionId = '';
       state.sheetApprovedByUser = false;
@@ -813,14 +823,14 @@
         state.pageImages[order.page]
       );
       const structureConfident = order.structureConfident !== false;
-      const sheetLayoutResolved = state.layoutErrors.length === 0;
+      const sheetLayoutResolved = !state.layoutErrors.some(issue => issue.page === order.page);
       const sheetCountMatches = state.declaredOrderCount === null || ORDERS_DATA.length === state.declaredOrderCount;
       const sheetTotal = ORDERS_DATA.reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
       const sheetTotalMatches = state.declaredTotalAmount === null ||
         Math.round(sheetTotal * 100) === Math.round(state.declaredTotalAmount * 100);
 
       const blocksWhatsApp = !isUserConfirmed || anyInvalidPhone || !isTotalValid || !hasArea ||
-        !sourceAvailable || !sheetLayoutResolved || !sheetCountMatches || !sheetTotalMatches ||
+        !sourceAvailable || !sheetLayoutResolved ||
         (!structureConfident && !isUserConfirmed) ||
         (!isUserConfirmed && (isMissingMerchantRaw || hasReviewReason || parsedPhones.ambiguousConcat));
 
@@ -1627,6 +1637,7 @@
 
       if (ORDERS_DATA.length === 0) {
         container.innerHTML = `
+          ${renderPageIssuesNotice(isDark)}
           <div class="rounded-[24px] border p-4 text-center space-y-3 ${isDark ? 'bg-[#1D232D] border-[#2E3746] text-[#E6E2DA]' : 'bg-[#FCFBF8] border-[#DFD9CC] text-[#1C242B] shadow-sm'}">
             <div class="w-10 h-10 rounded-xl wa-btn-glow text-white flex items-center justify-center text-base mx-auto shadow-sm">
               📄
@@ -1712,6 +1723,7 @@
 
       if (filtered.length === 0) {
         container.innerHTML = `
+          ${renderPageIssuesNotice(isDark)}
           <div class="rounded-[24px] border p-6 text-center space-y-2.5 ${isDark ? 'bg-[#1D232D] border-[#2E3746] text-[#C8C4BC]' : 'bg-[#FCFBF8] border-[#E4DFD3] text-[#4E565E] shadow-sm'}">
             <div class="text-xl">🔍</div>
             <div class="text-xs sm:text-sm font-black">لا توجد طلبيات مطابقة للبحث أو الفلتر المحدد</div>
@@ -1738,7 +1750,7 @@
         return;
       }
 
-      container.innerHTML = filtered.map(order => {
+      container.innerHTML = renderPageIssuesNotice(isDark) + filtered.map(order => {
         const audit = evaluateOrderAudit(order);
         const hasMerchant = Boolean(order.merchant && order.merchant.trim() && order.merchant.trim() !== '*');
         const merchantDisplay = hasMerchant ? order.merchant : 'بدون اسم';
@@ -2020,6 +2032,22 @@
           </article>
         `;
       }).join('');
+    }
+
+    function renderPageIssuesNotice(isDark) {
+      if (!state.layoutErrors.length) return '';
+      const issues = state.layoutErrors.map(issue => {
+        const canAdjust = Boolean(state.pageImages[issue.page] && state.pageLayouts[issue.page]);
+        return `<li class="flex items-center justify-between gap-2">
+          <span>الصفحة ${issue.page}: ${escapeHtml(issue.reason)}</span>
+          ${canAdjust ? `<button type="button" data-action="open-layout-page" data-page="${issue.page}" class="shrink-0 underline font-extrabold">ضبط الصفحة</button>` : ''}
+        </li>`;
+      }).join('');
+      return `<aside class="col-span-full rounded-2xl border p-3 text-xs ${isDark ? 'bg-amber-950/40 border-amber-500/40 text-amber-100' : 'bg-amber-50 border-amber-300 text-amber-900'}">
+        <strong>مراجعة صفحات محددة</strong>
+        <p class="mt-1">اُستخرجت الصفحات التي أمكن تحليلها؛ هذه الصفحات فقط تحتاج إلى مراجعة. لم تُستخدم بيانات تخمينية.</p>
+        <ul class="mt-1 space-y-1">${issues}</ul>
+      </aside>`;
     }
 
     function renderApp() {
@@ -2476,7 +2504,17 @@
         const seq = Number(target.getAttribute('data-seq'));
         const order = ORDERS_DATA.find(o => o.seq === seq);
 
-        if (action === 'copy-msg' && order) {
+        if (action === 'open-layout-page') {
+          const pageNum = Number(target.getAttribute('data-page'));
+          if (!state.pageImages[pageNum] || !state.pageLayouts[pageNum]) {
+            showToast('لا تتوفر معاينة لهذه الصفحة؛ بقيت طلبياتها المحتملة معزولة للمراجعة');
+            return;
+          }
+          state.layoutEditorPage = pageNum;
+          state.layoutEditorOpen = true;
+          renderApp();
+          renderLayoutEditor();
+        } else if (action === 'copy-msg' && order) {
             if (evaluateOrderAudit(order).blocksWhatsApp) {
               showToast('تحتاج الطلبية إلى مراجعة وتأكيد قبل نسخ الرسالة');
               return;
@@ -2576,6 +2614,26 @@
         const result = findHeaderLayout(headers, 800);
         return result && result.fieldsByColumn.join('|') === PDF_FIELDS.slice().reverse().map(field => field.key).join('|');
       });
+      check('استكمال عنوان واحد غير واضح من حدود الجدول الفعلية', () => {
+        const physicalFields = PDF_FIELDS.slice().reverse();
+        const headers = physicalFields.flatMap((field, idx) => field.key === 'merchant' ? [] : [{
+          str: field.label, x: idx * 100 + 50, x0: idx * 100 + 30, x1: idx * 100 + 70, y: 80
+        }]);
+        const verticalLines = Array.from({ length: 10 }, (_, idx) => idx * 100);
+        const result = findHeaderLayout(headers, 900, verticalLines);
+        return result && result.fieldsByColumn.join('|') === physicalFields.map(field => field.key).join('|');
+      });
+      check('ترك أكثر من عنوان غير معروف دون تخمين', () => {
+        const physicalFields = PDF_FIELDS.slice().reverse();
+        const headers = physicalFields.flatMap((field, idx) =>
+          ['merchant', 'recipient'].includes(field.key) ? [] : [{
+            str: field.label, x: idx * 100 + 50, x0: idx * 100 + 30, x1: idx * 100 + 70, y: 80
+          }]
+        );
+        const result = findHeaderLayout(headers, 900, Array.from({ length: 10 }, (_, idx) => idx * 100));
+        return result && result.fieldsByColumn.filter(Boolean).length === 7 &&
+          !result.fieldsByColumn.includes('merchant') && !result.fieldsByColumn.includes('recipient');
+      });
       check('الحفاظ على رقمي هاتف داخل الخانة نفسها', () =>
         parsePhoneCell('569297784\n565724997').phones.join('|') === '569297784|565724997'
       );
@@ -2616,6 +2674,26 @@
           rows[0].phones.join('|') === '569297784|565724997' && rows[0].coupon.includes('R19766') &&
           rows[0].merchant.includes('FASHION') && rows[1].phone === '547633730';
       });
+      check('تجاهل صف إجمالي الكشف بدل إنشائه كطلبية', () => {
+        const fields = ['notes', 'area', 'total', 'phone', 'recipient', 'merchant', 'company', 'coupon', 'order_no'];
+        const layout = { columnBounds: Array.from({ length: 10 }, (_, idx) => idx * 100), fieldsByColumn: fields };
+        const items = [];
+        const add = (field, value, y) => {
+          const x = (fields.indexOf(field) + 0.5) * 100;
+          items.push({ str: value, x, x0: x - 10, x1: x + 10, y });
+        };
+        [['order_no', '10'], ['coupon', 'C1'], ['merchant', 'RXM2'], ['phone', '569297784'],
+          ['total', '100'], ['area', 'عجبان']].forEach(([field, value]) => add(field, value, 10));
+        [['order_no', '29'], ['total', '2900'], ['notes', 'إجمالي الطلبيات']].forEach(([field, value]) => add(field, value, 40));
+        const oldSession = state.fileSessionId;
+        state.fileSessionId = 'safety-check';
+        const rows = extractRowsFromBands([
+          { y0: 0, y1: 30, confidence: true },
+          { y0: 30, y1: 60, confidence: true }
+        ], items, layout, 1, 60, 1);
+        state.fileSessionId = oldSession;
+        return rows.length === 1 && rows[0].order_no === '10';
+      });
       check('رسالة غير مدفوعة: المبلغ والسؤال دون اسم الشركة', () => {
         const message = buildWhatsAppMessage({ merchant: 'RXM2', company: 'ADS', phone: '569297784', total: 100, area: 'سويحان', notes: '' });
         return message.includes('100 درهم') && message.includes('والفلوس تحويل ولا كاش؟') &&
@@ -2637,9 +2715,9 @@
       state.fileSessionId = 'safety-check';
       state.pageImages = { 999: {} };
       state.confirmedSeqs = {};
-      state.layoutErrors = [];
-      state.declaredOrderCount = null;
-      state.declaredTotalAmount = null;
+      state.layoutErrors = [{ page: 2, reason: 'فشل اختبار صفحة أخرى' }];
+      state.declaredOrderCount = 99;
+      state.declaredTotalAmount = 999;
       const sample = {
         seq: -999, sourceSessionId: 'safety-check', page: 999, structureConfident: true,
         phone: '569297784', phones: ['569297784'], total: 100, area: 'سويحان', merchant: 'RXM2'
@@ -2650,6 +2728,9 @@
         state.confirmedSeqs[-999] = true;
         return blocked && !evaluateOrderAudit(sample).blocksWhatsApp;
       });
+      check('عزل أخطاء صفحة أخرى وعدم حجب سجل سليم بسبب فرق الملخص', () =>
+        !evaluateOrderAudit(sample).blocksWhatsApp
+      );
       state.fileSessionId = oldState.session;
       state.pageImages = oldState.images;
       state.confirmedSeqs = oldState.confirmed;
@@ -2730,7 +2811,7 @@
 
     function detectTableGridFromRenderedCanvas(canvas, scale, viewportWidth) {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return { hLinesPt: [] };
+      if (!ctx) return { hLinesPt: [], vLinesPt: [] };
       const W = canvas.width;
       const H = canvas.height;
       const imgData = ctx.getImageData(0, 0, W, H).data;
@@ -2738,6 +2819,9 @@
       const xEnd = Math.floor(W * 0.985);
       const spanW = Math.max(1, xEnd - xStart);
       const hLineYsPx = [];
+      const yStart = Math.floor(H * 0.08);
+      const yEnd = Math.floor(H * 0.92);
+      const vLineXsPx = [];
 
       for (let y = 0; y < H; y++) {
         let count = 0;
@@ -2752,13 +2836,27 @@
         if (count / Math.max(1, spanW / 2) > 0.62) hLineYsPx.push(y);
       }
 
+      const sampledHeight = Math.max(1, Math.ceil((yEnd - yStart) / 2));
+      for (let x = xStart; x < xEnd; x++) {
+        let count = 0;
+        for (let y = yStart; y < yEnd; y += 2) {
+          const idx = (y * W + x) * 4;
+          const r = imgData[idx];
+          const g = imgData[idx + 1];
+          const b = imgData[idx + 2];
+          if ((r < 115 && g < 170 && b < 190) || (r < 165 && g < 165 && b < 165)) count++;
+        }
+        if (count / sampledHeight > 0.2) vLineXsPx.push(x);
+      }
+
       return {
         hLinesPt: cluster1DIndices(hLineYsPx, Math.ceil(3 * scale)).map(yPx => yPx / scale),
+        vLinesPt: cluster1DIndices(vLineXsPx, Math.ceil(3 * scale)).map(xPx => xPx / scale),
         pageWidth: viewportWidth
       };
     }
 
-    function findHeaderLayout(items, pageWidth) {
+    function findHeaderLayout(items, pageWidth, verticalLines = []) {
       const lines = [];
       items.slice().sort((a, b) => a.y - b.y).forEach(item => {
         let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 5);
@@ -2772,13 +2870,21 @@
 
       let best = null;
       lines.forEach(line => {
-        const ordered = line.items.slice().sort((a, b) => a.x - b.x);
+        const nearbyItems = lines
+          .filter(candidate => Math.abs(candidate.y - line.y) <= 14)
+          .flatMap(candidate => candidate.items);
+        const ordered = nearbyItems.slice().sort((a, b) => a.x - b.x || a.y - b.y);
         const found = new Map();
         for (let start = 0; start < ordered.length; start++) {
           for (let end = start; end < Math.min(ordered.length, start + 4); end++) {
             const text = normalizeHeaderText(ordered.slice(start, end + 1).map(item => item.str).join(' '));
             const field = PDF_FIELDS.find(candidate =>
-              candidate.aliases.some(alias => text.includes(normalizeHeaderText(alias)))
+              candidate.aliases.some(alias => {
+                const normalizedAlias = normalizeHeaderText(alias);
+                return ordered.slice(start, end + 1).length === 1
+                  ? text.includes(normalizedAlias)
+                  : text === normalizedAlias;
+              })
             );
             if (!field || found.has(field.key)) continue;
             const segment = ordered.slice(start, end + 1);
@@ -2794,9 +2900,57 @@
         if (!best || found.size > best.fields.size) best = { y: line.y, fields: found };
       });
 
-      if (!best || best.fields.size !== PDF_FIELDS.length) return null;
+      if (!best || best.fields.size < 5) return null;
       const headers = Array.from(best.fields.values()).sort((a, b) => a.x - b.x);
-      if (new Set(headers.map(header => header.x)).size !== PDF_FIELDS.length) return null;
+      if (new Set(headers.map(header => header.x)).size !== headers.length) return null;
+
+      const gridBounds = verticalLines
+        .filter((bound, idx, all) => idx === 0 || bound - all[idx - 1] > 8)
+        .sort((a, b) => a - b);
+      if (gridBounds.length >= PDF_FIELDS.length + 1) {
+        let bestGrid = null;
+        for (let start = 0; start <= gridBounds.length - PDF_FIELDS.length - 1; start++) {
+          const bounds = gridBounds.slice(start, start + PDF_FIELDS.length + 1);
+          if (bounds.some((bound, idx) =>
+            idx > 0 && (bound <= bounds[idx - 1] || bound - bounds[idx - 1] < pageWidth * 0.015)
+          )) continue;
+          const mapped = Array(PDF_FIELDS.length).fill('');
+          let valid = true;
+          headers.forEach(header => {
+            const column = bounds.findIndex((bound, idx) =>
+              idx < bounds.length - 1 && header.x >= bound && header.x < bounds[idx + 1]
+            );
+            if (column < 0 || mapped[column]) valid = false;
+            else mapped[column] = header.key;
+          });
+          if (!valid) continue;
+
+          const missingFields = PDF_FIELDS.map(field => field.key).filter(key => !mapped.includes(key));
+          const emptyColumns = mapped.map((key, idx) => key ? -1 : idx).filter(idx => idx >= 0);
+          if (missingFields.length !== emptyColumns.length) continue;
+          if (missingFields.length === 1) mapped[emptyColumns[0]] = missingFields[0];
+          const score = headers.reduce((sum, header) => {
+            const column = bounds.findIndex((bound, idx) =>
+              idx < bounds.length - 1 && header.x >= bound && header.x < bounds[idx + 1]
+            );
+            const width = bounds[column + 1] - bounds[column];
+            const centerOffset = Math.abs(header.x - (bounds[column] + bounds[column + 1]) / 2);
+            return sum + 1 - centerOffset / Math.max(1, width / 2);
+          }, 0);
+          if (!bestGrid || score > bestGrid.score) bestGrid = { bounds, fieldsByColumn: mapped, score };
+        }
+        if (bestGrid && bestGrid.fieldsByColumn.filter(Boolean).length >= 5) {
+          return {
+            headerY: best.y,
+            columnBounds: bestGrid.bounds,
+            fieldsByColumn: bestGrid.fieldsByColumn,
+            headerCenters: headers.map(header => header.x),
+            headerSignature: bestGrid.fieldsByColumn.join('|')
+          };
+        }
+      }
+
+      if (best.fields.size !== PDF_FIELDS.length) return null;
       const bounds = [0];
       for (let i = 0; i < headers.length - 1; i++) {
         bounds.push((headers[i].x + headers[i + 1].x) / 2);
@@ -2974,8 +3128,14 @@
         });
 
         const rowData = Object.values(cellText).some(value => value);
-        const hasOrderIdentity = Boolean(cellText.order_no || cellText.phone || cellText.coupon || cellText.merchant);
-        if (!rowData || !hasOrderIdentity || /إجمالي\s*(?:الطلبيات|الكشف)/.test(rowItems.map(item => item.str).join(' '))) continue;
+        const rowText = rowItems.map(item => item.str).join(' ');
+        const normalizedRowText = normalizeHeaderText(rowText);
+        const summaryRow = /(?:اجماليالطلبيات|اجماليالكشف|عددالطلبيات|المسلم|راجع|صافيالاجمالي|العمولة)/.test(normalizedRowText);
+        const orderNoDigits = normalizePdfDigits(cellText.order_no).replace(/\D/g, '');
+        const hasCompleteOrderIdentity = /^\d{1,5}$/.test(orderNoDigits) &&
+          Boolean(cellText.merchant && cellText.phone && cellText.coupon);
+        if (!rowData ||
+          (summaryRow && !hasCompleteOrderIdentity)) continue;
 
         const phoneCellRaw = cellText.phone;
         const parsedP = parsePhoneCell(phoneCellRaw);
@@ -2985,6 +3145,9 @@
         const merchantClean = (merchantRaw === '*' ? '' : merchantRaw);
         const notes = cellText.notes;
         const reasons = [];
+        const headersComplete = layout.fieldsByColumn.length === PDF_FIELDS.length &&
+          PDF_FIELDS.every(field => layout.fieldsByColumn.filter(key => key === field.key).length === 1);
+        if (!headersComplete) reasons.push('تعذر تحديد بعض عناوين الأعمدة؛ الخانات غير المعروفة تُركت دون تخمين');
         if (!band.confidence) reasons.push('حدود الصف غير مؤكدة؛ راجع الصف يدويًا');
         if (!cellText.order_no) reasons.push('رقم الطلبية غير واضح داخل الصف');
         if (!phoneCellRaw) reasons.push('رقم الهاتف فارغ في خانته');
@@ -3015,8 +3178,8 @@
           total: totalVal,
           area: cellText.area,
           notes,
-          structureConfident: Boolean(band.confidence && cellText.order_no),
-          review_type: band.confidence ? (reasons.length ? 'missing_data' : '') : 'conflict',
+          structureConfident: Boolean(band.confidence && cellText.order_no && headersComplete),
+          review_type: band.confidence && headersComplete ? (reasons.length ? 'missing_data' : '') : 'conflict',
           review_reason: reasons.join('؛ '),
           rowY0: band.y0,
           rowY1: band.y1
@@ -3050,6 +3213,8 @@
       ORDERS_DATA = [];
       state.pageImages = {};
       state.pageLayouts = {};
+      state.autoPageLayouts = {};
+      state.autoLayoutIssues = {};
       state.layoutErrors = [];
       state.contactedSeqs = {};
       state.confirmedSeqs = {};
@@ -3086,6 +3251,8 @@
         const extractedOrders = [];
         const newPageImages = {};
         const newPageLayouts = {};
+        const newAutoPageLayouts = {};
+        const autoLayoutIssues = {};
         const layoutErrors = [];
         let seqCounter = 1;
         let declaredCount = null;
@@ -3095,7 +3262,9 @@
         const renderScale = (isSmallScreen || lowMemoryDevice) ? 1.2 : 1.45;
 
         for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-          const page = await pdfDocument.getPage(pageNum);
+          let page = null;
+          try {
+          page = await pdfDocument.getPage(pageNum);
           const viewport = page.getViewport({ scale: 1 });
           const renderViewport = page.getViewport({ scale: renderScale });
           const pageCanvas = document.createElement('canvas');
@@ -3129,8 +3298,8 @@
           if (summary.count !== null) declaredCount = summary.count;
           if (summary.total !== null) declaredTotal = summary.total;
 
-          const { hLinesPt } = detectTableGridFromRenderedCanvas(pageCanvas, renderScale, viewport.width);
-          const detectedHeader = findHeaderLayout(items, viewport.width);
+          const { hLinesPt, vLinesPt } = detectTableGridFromRenderedCanvas(pageCanvas, renderScale, viewport.width);
+          const detectedHeader = findHeaderLayout(items, viewport.width, vLinesPt);
           const baseLayout = detectedHeader || {
             headerY: 0,
             columnBounds: [0, viewport.width],
@@ -3139,36 +3308,68 @@
             headerSignature: ''
           };
           if (!detectedHeader) {
-            layoutErrors.push({ page: pageNum, reason: 'تعذر اكتشاف عناوين الأعمدة تلقائيًا؛ يلزم ضبط الحقول يدويًا' });
+            layoutErrors.push({ page: pageNum, reason: 'تعذر تحديد عناوين بعض الأعمدة تلقائيًا؛ لم تُنسب بياناتها إلى حقول بالتخمين' });
           }
+          const detectedRowBands = detectedHeader
+            ? buildRowBands(items, detectedHeader, hLinesPt, viewport.height)
+            : [];
+          const autoRowsDetected = detectedRowBands.length > 0;
           const layout = {
             ...baseLayout,
             viewportWidth: viewport.width,
             viewportHeight: viewport.height,
             rotation: page.rotate || 0,
             items,
-            rowBands: detectedHeader
-              ? buildRowBands(items, detectedHeader, hLinesPt, viewport.height)
-              : [{ y0: 0, y1: viewport.height, confidence: false }]
+            rowBands: autoRowsDetected
+              ? detectedRowBands
+              : [{ y0: detectedHeader ? detectedHeader.headerY : 0, y1: viewport.height, confidence: false }],
+            autoRowsDetected
           };
           newPageLayouts[pageNum] = layout;
 
-          if (!layout.rowBands.length) {
-            layout.rowBands = [{ y0: detectedHeader ? detectedHeader.headerY : 0, y1: viewport.height, confidence: false }];
-            layoutErrors.push({ page: pageNum, reason: 'تعذر اكتشاف حدود الصفوف تلقائيًا؛ يلزم ضبطها يدويًا' });
+          if (!autoRowsDetected) {
+            layoutErrors.push({ page: pageNum, reason: 'تعذر اكتشاف حدود الصفوف تلقائيًا؛ لم تُستخرج سجلات غير مؤكدة' });
           }
           const assignedFields = layout.fieldsByColumn.filter(Boolean);
-          const readyLayout = assignedFields.length === PDF_FIELDS.length &&
-            PDF_FIELDS.every(field => assignedFields.filter(key => key === field.key).length === 1);
-          const pageOrders = readyLayout
+          const readyLayout = assignedFields.length >= 5 &&
+            assignedFields.every(key => PDF_FIELDS.some(field => field.key === key)) &&
+            new Set(assignedFields).size === assignedFields.length;
+          const pageOrders = readyLayout && autoRowsDetected
             ? extractRowsFromBands(layout.rowBands, items, layout, pageNum, viewport.height, seqCounter)
             : [];
           if (!pageOrders.length && !layoutErrors.some(issue => issue.page === pageNum)) {
-            layoutErrors.push({ page: pageNum, reason: 'لم تُكتشف سجلات واضحة في الصفحة؛ يلزم ضبط الحدود يدويًا' });
+            layoutErrors.push({ page: pageNum, reason: 'لم تُكتشف سجلات واضحة في الصفحة؛ بقيت الصفحة معزولة للمراجعة' });
           }
           extractedOrders.push(...pageOrders);
           seqCounter += pageOrders.length;
-          if (typeof page.cleanup === 'function') page.cleanup();
+          newAutoPageLayouts[pageNum] = {
+            columnBounds: layout.columnBounds.slice(),
+            fieldsByColumn: layout.fieldsByColumn.slice(),
+            rowBands: layout.rowBands.map(band => ({ ...band })),
+            autoRowsDetected: layout.autoRowsDetected
+          };
+          autoLayoutIssues[pageNum] = layoutErrors.filter(issue => issue.page === pageNum).map(issue => ({ ...issue }));
+          if (typeof page.cleanup === 'function') {
+            try {
+              page.cleanup();
+            } catch (cleanupError) {
+              console.error(`PDF page ${pageNum} cleanup failed:`, cleanupError);
+            }
+          }
+          } catch (pageError) {
+            const reason = pageError && pageError.message ? pageError.message : 'تعذر تحليل الصفحة';
+            const issue = { page: pageNum, reason: `فشل تحليل الصفحة ${pageNum}: ${reason}` };
+            layoutErrors.push(issue);
+            autoLayoutIssues[pageNum] = [{ ...issue }];
+            console.error(`PDF page ${pageNum} analysis failed:`, pageError);
+            if (page && typeof page.cleanup === 'function') {
+              try {
+                page.cleanup();
+              } catch (cleanupError) {
+                console.error(`PDF page ${pageNum} cleanup failed:`, cleanupError);
+              }
+            }
+          }
         }
 
         ORDERS_DATA = extractedOrders;
@@ -3177,6 +3378,8 @@
         state.declaredTotalAmount = declaredTotal;
         state.pageImages = newPageImages;
         state.pageLayouts = newPageLayouts;
+        state.autoPageLayouts = newAutoPageLayouts;
+        state.autoLayoutIssues = autoLayoutIssues;
         state.layoutErrors = layoutErrors;
         state.pdfDocument = pdfDocument;
         pdfDocument = null;
@@ -3196,12 +3399,16 @@
         renderApp();
         window.scrollTo({ top: 0, behavior: 'smooth' });
         showToast(layoutErrors.length
-          ? `توقف الاستخراج الآلي في ${layoutErrors.length} صفحة؛ افتح «ضبط الأعمدة» لإكمالها يدويًا`
-          : `تم إنشاء ${extractedOrders.length} سجلًا؛ كل سجل يحتاج مراجعة وتأكيدًا قبل واتساب`);
+          ? `اكتمل الاستخراج: ${extractedOrders.length} سجلًا. توجد ${layoutErrors.length} صفحة تحتاج مراجعة؛ لم يتوقف تحليل بقية الصفحات.`
+          : extractedOrders.length
+            ? `تم إنشاء ${extractedOrders.length} سجلًا؛ راجع السجلات وأكدها قبل واتساب`
+            : 'اكتملت قراءة الملف، لكن لم تُكتشف طلبيات واضحة');
       } catch (err) {
         const message = err && err.message ? err.message : 'حدث خطأ غير معروف';
         state.pageImages = {};
         state.pageLayouts = {};
+        state.autoPageLayouts = {};
+        state.autoLayoutIssues = {};
         state.layoutErrors = [];
         ORDERS_DATA = [];
         renderApp();
@@ -3289,9 +3496,11 @@
       Object.keys(state.pageLayouts).map(Number).sort((a, b) => a - b).forEach(pageNum => {
         const layout = state.pageLayouts[pageNum];
         const assignedFields = layout.fieldsByColumn.filter(Boolean);
-        const fieldsReady = assignedFields.length === PDF_FIELDS.length &&
-          PDF_FIELDS.every(field => assignedFields.filter(key => key === field.key).length === 1);
-        if (!fieldsReady || !layout.rowBands.length) return;
+        const fieldsReady = assignedFields.length >= 5 &&
+          assignedFields.every(key => PDF_FIELDS.some(field => field.key === key)) &&
+          new Set(assignedFields).size === assignedFields.length;
+        const rowsReady = layout.autoRowsDetected || layout.rowBands.length > 1;
+        if (!fieldsReady || !rowsReady) return;
         const pageOrders = extractRowsFromBands(
           layout.rowBands, layout.items, layout, pageNum, layout.viewportHeight, nextSeq
         );
@@ -3334,6 +3543,10 @@
 
       canvas.width = image.width;
       canvas.height = image.height;
+      document.getElementById('layoutEditorCanvasWrap').style.width =
+        `${Math.round(state.layoutEditorZoom * 100)}%`;
+      document.getElementById('layoutZoomValue').textContent =
+        `${Math.round(state.layoutEditorZoom * 100)}%`;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('تعذر تجهيز معاينة تخطيط PDF');
       ctx.drawImage(image, 0, 0);
@@ -3412,6 +3625,45 @@
     document.getElementById('closeLayoutEditorBtn').addEventListener('click', function() {
       state.layoutEditorOpen = false;
       renderApp();
+    });
+
+    document.getElementById('layoutZoomOutBtn').addEventListener('click', function() {
+      state.layoutEditorZoom = Math.max(0.6, Math.round((state.layoutEditorZoom - 0.2) * 10) / 10);
+      renderLayoutEditor();
+    });
+
+    document.getElementById('layoutZoomInBtn').addEventListener('click', function() {
+      state.layoutEditorZoom = Math.min(2.5, Math.round((state.layoutEditorZoom + 0.2) * 10) / 10);
+      renderLayoutEditor();
+    });
+
+    document.getElementById('reanalyzeLayoutBtn').addEventListener('click', function() {
+      if (!state.pageLayouts[state.layoutEditorPage]) {
+        showToast('لا يوجد تخطيط تلقائي صالح لإعادة تحليله في هذه الصفحة');
+        return;
+      }
+      rebuildOrdersFromPageLayouts();
+      updateLayoutGuides();
+      showToast('أُعيد تحليل الصفوف وفق الحدود الحالية');
+    });
+
+    document.getElementById('restoreAutoLayoutBtn').addEventListener('click', function() {
+      const layout = state.pageLayouts[state.layoutEditorPage];
+      const automatic = state.autoPageLayouts[state.layoutEditorPage];
+      if (!layout || !automatic) {
+        showToast('لا تتوفر حدود تلقائية محفوظة لهذه الصفحة');
+        return;
+      }
+      layout.columnBounds = automatic.columnBounds.slice();
+      layout.fieldsByColumn = automatic.fieldsByColumn.slice();
+      layout.rowBands = automatic.rowBands.map(band => ({ ...band }));
+      layout.autoRowsDetected = automatic.autoRowsDetected;
+      state.layoutErrors = state.layoutErrors
+        .filter(issue => issue.page !== Number(state.layoutEditorPage))
+        .concat((state.autoLayoutIssues[state.layoutEditorPage] || []).map(issue => ({ ...issue })));
+      rebuildOrdersFromPageLayouts();
+      updateLayoutGuides();
+      showToast('تمت استعادة الحدود التي اكتشفها النظام تلقائيًا');
     });
 
     document.getElementById('layoutPageSelect').addEventListener('change', function() {
