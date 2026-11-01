@@ -1155,22 +1155,27 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open the regular WhatsApp app on mobile, or WhatsApp Web on desktop.
+    function isMobileWhatsAppPlatform() {
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+      return /Android|iPhone|iPad|iPod/i.test(ua) ||
+        (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    function getWhatsAppLinkTarget() {
+      return isMobileWhatsAppPlatform() ? '_self' : '_blank';
+    }
+
+    // Use WhatsApp's universal link on mobile to avoid custom-scheme launch prompts.
     function buildWhatsAppUrl(phone, message) {
       const encodedMessage = encodeURIComponent(message || '');
       const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
-      const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
-      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
 
-      if (/Android/i.test(ua)) {
-        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
-      }
-      if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        return 'whatsapp://send?' + query;
+      if (isMobileWhatsAppPlatform()) {
+        return 'https://wa.me/' + cleanPhone + '?text=' + encodedMessage;
       }
 
       // Desktop: WhatsApp Web uses the account currently signed in by the user.
-      return 'https://web.whatsapp.com/send?' + query;
+      return 'https://web.whatsapp.com/send?phone=' + cleanPhone + '&text=' + encodedMessage;
     }
 
     function buildWhatsAppMessage(order) {
@@ -2080,7 +2085,7 @@
               </button>
               <a
                 href="${escapeHtml(primaryWaUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -2118,7 +2123,7 @@
             return `
               <a
                 href="${escapeHtml(waUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -2418,7 +2423,7 @@
         return `
           <a
             href="${escapeHtml(waUrl)}"
-            target="_blank"
+            target="${getWhatsAppLinkTarget()}"
             rel="noopener noreferrer"
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
