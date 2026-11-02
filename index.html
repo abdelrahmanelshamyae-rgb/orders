@@ -240,6 +240,225 @@
         transition-duration: .01ms !important;
       }
     }
+
+    /* Premium neon glass theme, restricted to dark mode. */
+    body.dark-mode {
+      color-scheme: dark;
+      --bg-app: #080d18;
+      --bg-header: rgba(8, 16, 31, .86);
+      --bg-card: #111d32;
+      --bg-inner: #172a45;
+      --border-soft: rgba(104, 151, 218, .22);
+      --text-primary: #f4f7ff;
+      --text-secondary: #9aacc9;
+      --accent-teal: #37d8ef;
+      --accent-teal-dark: #168fc4;
+      background:
+        radial-gradient(ellipse at 12% 8%, rgba(20, 114, 235, .20), transparent 34%),
+        radial-gradient(ellipse at 92% 76%, rgba(117, 54, 191, .16), transparent 36%),
+        linear-gradient(145deg, #0c1629, #080e1b, #070b14) !important;
+      background-attachment: fixed;
+      color: var(--text-primary);
+    }
+
+    body.dark-mode #mainStickyHeader,
+    body.dark-mode #bottomNavBar {
+      background: rgba(8, 16, 31, .86) !important;
+      border-color: rgba(103, 158, 226, .20) !important;
+      box-shadow: 0 12px 38px rgba(0, 0, 0, .36),
+        inset 0 1px 0 rgba(150, 195, 255, .07) !important;
+      backdrop-filter: blur(24px) saturate(170%);
+      -webkit-backdrop-filter: blur(24px) saturate(170%);
+    }
+
+    body.dark-mode #mainSearchInput,
+    body.dark-mode .mfilter-btn,
+    body.dark-mode #areaFilterPills button {
+      background: rgba(20, 35, 59, .82) !important;
+      color: #eaf3ff !important;
+      border: 1px solid rgba(100, 160, 230, .23) !important;
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04),
+        0 7px 20px rgba(0, 0, 0, .16) !important;
+    }
+
+    body.dark-mode #mainSearchInput::placeholder { color: #8da3c4 !important; }
+
+    body.dark-mode .mfilter-btn.active,
+    body.dark-mode #areaFilterPills button.active,
+    body.dark-mode #areaFilterPills .afilter-btn[class*="bg-teal-500/25"] {
+      border-color: rgba(51, 211, 238, .65) !important;
+      color: #68e8f5 !important;
+      box-shadow: 0 0 0 3px rgba(38, 190, 229, .10),
+        0 0 18px rgba(38, 190, 229, .12) !important;
+    }
+
+    body.dark-mode .ticket-card {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      border: 1px solid rgba(102, 157, 226, .23) !important;
+      border-radius: 23px !important;
+      padding: 17px !important;
+      color: #f1f6ff !important;
+      background: linear-gradient(135deg, rgba(24, 43, 72, .96), rgba(13, 24, 43, .97)) !important;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .30),
+        inset 0 1px 0 rgba(200, 225, 255, .08) !important;
+      backdrop-filter: blur(18px) saturate(145%);
+      -webkit-backdrop-filter: blur(18px) saturate(145%);
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+
+    body.dark-mode .ticket-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 2px;
+      z-index: 0;
+      background: linear-gradient(90deg, transparent, #37d8ef, #477dff, transparent);
+      pointer-events: none;
+    }
+
+    body.dark-mode .ticket-card:active {
+      transform: scale(.992);
+      border-color: rgba(55, 216, 239, .55) !important;
+    }
+
+    body.dark-mode .ticket-card h2 { color: #f5f8ff !important; }
+
+    body.dark-mode .ticket-card p,
+    body.dark-mode .ticket-card small { color: #9fb1ce !important; }
+
+    body.dark-mode .ticket-card > div:nth-of-type(2) {
+      background: linear-gradient(135deg, rgba(22, 43, 71, .92), rgba(15, 29, 51, .92)) !important;
+      border: 1px solid rgba(84, 155, 225, .20) !important;
+      border-radius: 18px !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    }
+
+    body.dark-mode .ticket-card [data-action="open-wa"],
+    body.dark-mode #modalWaActionsRow [data-modal-open-wa] {
+      min-height: 44px;
+      padding: 9px 17px !important;
+      color: #fff !important;
+      background: linear-gradient(135deg, #168fe0, #2359d5) !important;
+      border: 1px solid rgba(137, 205, 255, .35) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 7px 22px rgba(30, 113, 226, .30),
+        inset 0 1px 0 rgba(255, 255, 255, .18) !important;
+      font-size: 12px !important;
+      font-weight: 900 !important;
+      transition: filter .2s ease, box-shadow .2s ease;
+    }
+
+    body.dark-mode .ticket-card [data-action="open-wa"]:hover,
+    body.dark-mode #modalWaActionsRow [data-modal-open-wa]:hover {
+      filter: brightness(1.12);
+      box-shadow: 0 9px 26px rgba(30, 135, 242, .38) !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-cancelled"] {
+      min-height: 42px;
+      padding: 8px 14px !important;
+      color: #ff9cac !important;
+      background: linear-gradient(135deg, rgba(126, 34, 57, .30), rgba(74, 25, 46, .48)) !important;
+      border: 1px solid rgba(255, 99, 132, .38) !important;
+      border-radius: 13px !important;
+      font-weight: 900 !important;
+      transition: background .2s ease, box-shadow .2s ease;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-cancelled"][aria-pressed="true"] {
+      color: #fff !important;
+      background: linear-gradient(135deg, #f04b70, #b91f50) !important;
+      border-color: transparent !important;
+      box-shadow: 0 7px 20px rgba(220, 38, 85, .25) !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="toggle-contacted"] {
+      min-height: 42px;
+      padding: 8px 13px !important;
+      color: #72e6c0 !important;
+      background: rgba(17, 143, 111, .14) !important;
+      border: 1px solid rgba(65, 220, 174, .30) !important;
+      border-radius: 13px !important;
+      font-weight: 900 !important;
+    }
+
+    body.dark-mode .ticket-card [data-action="copy-phone"],
+    body.dark-mode .ticket-card [data-action="copy-msg"],
+    body.dark-mode .ticket-card [data-action="toggle-msg-preview"] {
+      color: #dceaff !important;
+      background: rgba(33, 55, 86, .86) !important;
+      border: 1px solid rgba(106, 162, 229, .24) !important;
+      border-radius: 13px !important;
+    }
+
+    body.dark-mode .wa-btn-glow {
+      background: linear-gradient(135deg, #168fe0, #2359d5) !important;
+      box-shadow: 0 8px 22px rgba(30, 113, 226, .28) !important;
+    }
+
+    body.dark-mode .review-btn-glow {
+      color: #fff !important;
+      background: linear-gradient(135deg, #e8a13b, #c66b22) !important;
+      box-shadow: 0 7px 18px rgba(211, 130, 39, .22) !important;
+    }
+
+    body.dark-mode #sourceInspectModal { background: rgba(2, 7, 17, .78) !important; }
+
+    body.dark-mode #sourceInspectCard {
+      color: #f1f6ff !important;
+      background: linear-gradient(145deg, rgba(18, 34, 58, .98), rgba(9, 18, 34, .99)) !important;
+      border: 1px solid rgba(106, 164, 231, .25) !important;
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .58) !important;
+    }
+
+    body.dark-mode #sourceInspectCard .modal-input {
+      color: #f1f6ff !important;
+      background: rgba(7, 16, 31, .78) !important;
+      border-color: rgba(107, 162, 225, .26) !important;
+    }
+
+    body.dark-mode #inspectEditForm button[type="submit"] {
+      min-height: 50px;
+      color: #fff !important;
+      background: linear-gradient(135deg, #168fe0, #2459d4) !important;
+      border-radius: 15px !important;
+      box-shadow: 0 8px 24px rgba(30, 113, 226, .30) !important;
+    }
+
+    body.dark-mode #reviewToolbar,
+    body.dark-mode #reviewTableWrapper {
+      background: rgba(17, 29, 50, .94) !important;
+      border-color: rgba(104, 151, 218, .22) !important;
+    }
+
+    body.dark-mode #reviewTableHeadRow {
+      background: rgba(29, 49, 77, .96) !important;
+      border-color: rgba(104, 151, 218, .22) !important;
+      color: #eaf3ff !important;
+    }
+
+    body.dark-mode #bottomNavBar button {
+      min-height: 47px !important;
+      border-radius: 14px !important;
+      font-weight: 900 !important;
+    }
+
+    body.dark-mode button:focus-visible,
+    body.dark-mode a:focus-visible,
+    body.dark-mode input:focus-visible,
+    body.dark-mode select:focus-visible,
+    body.dark-mode textarea:focus-visible {
+      outline: 2px solid rgba(55, 216, 239, .72) !important;
+      outline-offset: 3px !important;
+    }
+
+    @media (max-width: 420px) {
+      body.dark-mode .ticket-card { padding: 14px !important; }
+      body.dark-mode .ticket-card [data-action="open-wa"] { padding-inline: 12px !important; }
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -896,23 +1115,20 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open WhatsApp Business specifically (never fall back to the regular WhatsApp app).
-    function buildWhatsAppBusinessUrl(phone, message) {
+    // Open regular WhatsApp on mobile; use WhatsApp Web on desktop.
+    function buildWhatsAppUrl(phone, message) {
       const encodedMessage = encodeURIComponent(message || '');
       const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
       const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
       const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
 
       if (/Android/i.test(ua)) {
-        // Android package name uniquely targets WhatsApp Business.
-        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end';
+        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
       }
       if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        // iOS custom scheme targets WhatsApp Business only.
-        return 'whatsapp-business://send?' + query;
+        return 'whatsapp://send?' + query;
       }
 
-      // Desktop: WhatsApp Web uses the account currently signed in by the user.
       return 'https://web.whatsapp.com/send?' + query;
     }
 
@@ -1771,7 +1987,7 @@
         const primaryWaKey = order.seq + ':' + primaryPhoneInfo.intl;
         const primaryRegState = state.waRegStatus[primaryWaKey] || 'unknown';
         const primaryWaUrl = primaryPhoneInfo.valid
-          ? buildWhatsAppBusinessUrl(primaryPhoneInfo.intl, messageText)
+          ? buildWhatsAppUrl(primaryPhoneInfo.intl, messageText)
           : '';
 
         // Compact Small-Icon Capsule Thumb Buttons
@@ -1833,7 +2049,7 @@
                 <svg class="w-3 h-3 shrink-0 fill-current" viewBox="0 0 24 24">
                   <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.625.846 5.059 2.284 7.033l-1.492 5.448 5.601-1.469c1.908 1.263 4.195 1.988 6.607 1.988 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/>
                 </svg>
-                <span>واتساب للأعمال</span>
+                <span>واتساب</span>
               </a>
             </div>
           `;
@@ -1845,7 +2061,7 @@
           const allPhonesRow = audit.phonesList.map((rawP, idx) => {
             const pInfo = audit.phoneValidations[idx];
             const waUrl = pInfo.valid
-              ? buildWhatsAppBusinessUrl(pInfo.intl, messageText)
+              ? buildWhatsAppUrl(pInfo.intl, messageText)
               : '';
             const waKey = order.seq + ':' + pInfo.intl;
             const regState = state.waRegStatus[waKey] || 'unknown';
@@ -1868,7 +2084,7 @@
                 data-phone="${escapeHtml(pInfo.intl)}"
                 class="inline-flex items-center gap-1 text-[11px] font-extrabold px-3.5 py-1 rounded-full wa-btn-glow text-white no-underline num-ltr"
               >
-                <span>واتساب للأعمال ${escapeHtml(pInfo.displayLocal)}</span>
+                <span>واتساب ${escapeHtml(pInfo.displayLocal)}</span>
               </a>
             `;
           }).join('');
@@ -2142,14 +2358,14 @@
         const waKey = order.seq + ':' + pInfo.intl;
         const regState = state.waRegStatus[waKey] || 'unknown';
         const waUrl = pInfo.valid
-          ? buildWhatsAppBusinessUrl(pInfo.intl, msgText)
+          ? buildWhatsAppUrl(pInfo.intl, msgText)
           : '';
 
         if (isCancelled) {
           return `<span class="text-[11px] font-extrabold text-rose-600 dark:text-rose-300">⛔ طلبية ملغاة — لن يتم فتح واتساب</span>`;
         }
         if (audit.blocksWhatsApp) {
-          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})</span>`;
+          return `<span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">🔒 اضغط «تأكيد صحة بيانات الطلبية» لتفعيل فتح واتساب (${escapeHtml(pInfo.displayLocal)})</span>`;
         }
         if (regState === 'unregistered') {
           return `
@@ -2166,7 +2382,7 @@
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
           >
-            فتح واتساب للأعمال (${escapeHtml(pInfo.displayLocal)})
+            فتح واتساب (${escapeHtml(pInfo.displayLocal)})
           </a>
           <button
             type="button"
