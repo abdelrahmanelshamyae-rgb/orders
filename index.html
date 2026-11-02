@@ -1342,6 +1342,8 @@
       const ys = corners.map(point => point[1]);
       return {
         str: normalizePdfText(item.str || ''),
+        pdfX: Number(t[4] || 0),
+        pdfY: Number(t[5] || 0),
         x: Math.min(...xs),
         x1: Math.max(...xs),
         y: (Math.min(...ys) + Math.max(...ys)) / 2,
@@ -1355,6 +1357,73 @@
 
     function getItemsInsideRowBand(items, y0, y1) {
       return items.filter(item => item.y >= y0 && item.y < y1);
+    }
+
+    function viewportRectToPdfRect(x0, y0, x1, y1, transform) {
+      const [a, b, c, d, e, f] = transform;
+      const determinant = a * d - b * c;
+      if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-10) return null;
+      const inversePoint = (x, y) => {
+        const translatedX = x - e;
+        const translatedY = y - f;
+        return [
+          (d * translatedX - c * translatedY) / determinant,
+          (-b * translatedX + a * translatedY) / determinant
+        ];
+      };
+      const points = [
+        inversePoint(x0, y0),
+        inversePoint(x1, y0),
+        inversePoint(x0, y1),
+        inversePoint(x1, y1)
+      ];
+      const xs = points.map(point => point[0]);
+      const ys = points.map(point => point[1]);
+      return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+    }
+
+    function pdfRectToCanvasRect(rect, geometry, canvasWidth, canvasHeight) {
+      if (!rect || !geometry || !Array.isArray(geometry.renderTransform)) return null;
+      const [a, b, c, d, e, f] = geometry.renderTransform;
+      const points = [
+        [rect.x0, rect.y0],
+        [rect.x1, rect.y0],
+        [rect.x0, rect.y1],
+        [rect.x1, rect.y1]
+      ].map(([x, y]) => [a * x + c * y + e, b * x + d * y + f]);
+      const xs = points.map(point => point[0]);
+      const ys = points.map(point => point[1]);
+      const scaleX = canvasWidth / geometry.renderViewportWidth;
+      const scaleY = canvasHeight / geometry.renderViewportHeight;
+      return {
+        x0: Math.min(...xs) * scaleX,
+        y0: Math.min(...ys) * scaleY,
+        x1: Math.max(...xs) * scaleX,
+        y1: Math.max(...ys) * scaleY
+      };
+    }
+
+    function getPdfCellText(bucket) {
+      const lines = [];
+      bucket.forEach(item => {
+        const centerY = (item.y0 + item.y1) / 2;
+        let line = lines.find(candidate => Math.abs(candidate.y - centerY) <= Math.max(2.5, Math.min(5, item.height * 0.35)));
+        if (!line) {
+          line = { y: centerY, items: [] };
+          lines.push(line);
+        }
+        line.items.push(item);
+        line.y = line.items.reduce((sum, entry) => sum + (entry.y0 + entry.y1) / 2, 0) / line.items.length;
+      });
+      return lines.sort((a, b) => a.y - b.y).map(line => {
+        const text = line.items.map(item => item.str).join('');
+        const arabicCount = (text.match(/[\u0600-\u06ff]/g) || []).length;
+        const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+        line.items.sort((a, b) => arabicCount > latinCount
+          ? getItemCenterX(b) - getItemCenterX(a)
+          : getItemCenterX(a) - getItemCenterX(b));
+        return line.items.map(item => item.str).join(' ').trim();
+      }).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
     }
 
     function parsePdfAmount(rawValue) {
@@ -1660,12 +1729,6 @@
         order_no: 'الطلبية'
       };
       const labels = document.getElementById('modalCropColumnLabels');
-      const cells = (order.cellBoundsPdf || []).slice().sort((a, b) => a.x0 - b.x0);
-      if (labels) {
-        labels.innerHTML = cells.map(cell => `<span>${fieldLabels[cell.field] || cell.field}</span>`).join('');
-        labels.style.gridTemplateColumns = cells.map(cell => `${Math.max(1, cell.x1 - cell.x0)}fr`).join(' ');
-        labels.classList.toggle('hidden', cells.length !== 9);
-      }
       const imgSource = hasCurrentOrderPdfSource(order) ? state.pageImages[pageNum] : null;
       const status = document.getElementById('modalRowCropStatus');
       const unavailableMessage = 'لا تتوفر صورة المصدر المطابقة لهذه الجلسة. ارفع ملف PDF الحالي لمراجعة الصف؛ لن نعرض صورة قديمة.';
@@ -1685,6 +1748,17 @@
         }
         return;
       }
+      const sourceWidth = imgSource.naturalWidth || imgSource.width;
+      const sourceHeight = imgSource.naturalHeight || imgSource.height;
+      const cells = (order.cellBoundsPdf || []).map(cell => ({
+        cell,
+        rect: pdfRectToCanvasRect(cell, order.pageGeometry, sourceWidth, sourceHeight)
+      })).filter(entry => entry.rect).sort((a, b) => a.rect.x0 - b.rect.x0);
+      if (labels) {
+        labels.innerHTML = cells.map(({ cell }) => `<span>${fieldLabels[cell.field] || cell.field}</span>`).join('');
+        labels.style.gridTemplateColumns = cells.map(({ rect }) => `${Math.max(1, rect.x1 - rect.x0)}fr`).join(' ');
+        labels.classList.toggle('hidden', cells.length !== 9);
+      }
       if (order.rowBoundsUncertain) {
         canvasEl.width = 1;
         canvasEl.height = 1;
@@ -1696,13 +1770,17 @@
         return;
       }
 
-      const imgW = imgSource.naturalWidth || imgSource.width;
-      const imgH = imgSource.naturalHeight || imgSource.height;
+      const imgW = sourceWidth;
+      const imgH = sourceHeight;
       if (!imgW || !imgH) return;
 
-      const { y0, y1 } = order.rowBoundsPdf;
-      const pageHeight = Number(order.pageGeometry.height);
-      if (!Number.isFinite(y0) || !Number.isFinite(y1) || y1 <= y0 || !pageHeight) {
+      const sourceRect = pdfRectToCanvasRect(
+        order.rowBoundsPdf,
+        order.pageGeometry,
+        imgW,
+        imgH
+      );
+      if (!sourceRect || sourceRect.x1 <= sourceRect.x0 || sourceRect.y1 <= sourceRect.y0) {
         canvasEl.width = 1;
         canvasEl.height = 1;
         canvasEl.classList.add('hidden');
@@ -1713,33 +1791,26 @@
         return;
       }
 
-      const sy = Math.max(0, Math.floor((y0 / pageHeight) * imgH));
-      const ey = Math.min(imgH, Math.ceil((y1 / pageHeight) * imgH));
+      const pad = 1;
+      const sx = Math.max(0, Math.floor(sourceRect.x0) - pad);
+      const sy = Math.max(0, Math.floor(sourceRect.y0) - pad);
+      const ex = Math.min(imgW, Math.ceil(sourceRect.x1) + pad);
+      const ey = Math.min(imgH, Math.ceil(sourceRect.y1) + pad);
+      const sw = Math.max(1, ex - sx);
       const sh = Math.max(1, ey - sy);
 
-      canvasEl.width = imgW;
+      canvasEl.width = sw;
       canvasEl.height = sh;
       const ctx = canvasEl.getContext('2d');
       if (!ctx) return;
-      ctx.clearRect(0, 0, imgW, sh);
-      ctx.drawImage(imgSource, 0, sy, imgW, sh, 0, 0, imgW, sh);
+      ctx.clearRect(0, 0, sw, sh);
+      ctx.drawImage(imgSource, sx, sy, sw, sh, 0, 0, sw, sh);
       ctx.strokeStyle = '#0D9488';
-      ctx.lineWidth = Math.max(2, imgW / 900);
-      const pageWidth = Number(order.pageGeometry.width);
-      if (!Number.isFinite(pageWidth) || pageWidth <= 0) {
-        canvasEl.classList.add('hidden');
-        if (status) {
-          status.textContent = 'أبعاد الصفحة غير صالحة؛ لم يتم عرض قصاصة.';
-          status.classList.remove('hidden');
-        }
-        return;
-      }
-      (order.cellBoundsPdf || []).forEach(cell => {
-        const x0 = Math.max(0, (cell.x0 / pageWidth) * imgW);
-        const x1 = Math.min(imgW, (cell.x1 / pageWidth) * imgW);
-        const cellY0 = (cell.y0 / pageHeight) * imgH - sy;
-        const cellY1 = (cell.y1 / pageHeight) * imgH - sy;
-        ctx.strokeRect(x0, cellY0, x1 - x0, cellY1 - cellY0);
+      ctx.lineWidth = Math.max(2, sw / 900);
+      cells.forEach(({ rect: cellRect }) => {
+        const cellX0 = cellRect.x0 - sx;
+        const cellY0 = cellRect.y0 - sy;
+        ctx.strokeRect(cellX0, cellY0, cellRect.x1 - cellRect.x0, cellRect.y1 - cellRect.y0);
       });
     }
 
@@ -1766,20 +1837,18 @@
       if (!ctx) return;
       ctx.drawImage(imgSource, 0, 0);
 
-      const pageHeight = Number(order.pageGeometry && order.pageGeometry.height);
       const rowBounds = order.rowBoundsPdf;
-      if (!pageHeight || !rowBounds) return;
-      const sy = Math.floor((rowBounds.y0 / pageHeight) * imgH);
-      const sh = Math.max(1, Math.ceil(((rowBounds.y1 - rowBounds.y0) / pageHeight) * imgH));
+      const rowRect = pdfRectToCanvasRect(rowBounds, order.pageGeometry, imgW, imgH);
+      if (!rowRect) return;
       if (order.rowBoundsUncertain) return;
 
       ctx.fillStyle = 'rgba(20, 24, 31, 0.45)';
-      ctx.fillRect(0, 0, imgW, sy);
-      ctx.fillRect(0, sy + sh, imgW, imgH - (sy + sh));
+      ctx.fillRect(0, 0, imgW, rowRect.y0);
+      ctx.fillRect(0, rowRect.y1, imgW, imgH - rowRect.y1);
 
       ctx.strokeStyle = '#0D9488';
       ctx.lineWidth = 4;
-      ctx.strokeRect(12, sy - 2, imgW - 24, sh + 4);
+      ctx.strokeRect(rowRect.x0, rowRect.y0, rowRect.x1 - rowRect.x0, rowRect.y1 - rowRect.y0);
     }
 
     function renderPdfDiagnostics() {
@@ -1832,23 +1901,23 @@
 
       pageOrders.forEach((order, index) => {
         const geometry = order.pageGeometry;
-        if (!geometry || !order.rowBoundsPdf) return;
-        const sx = imgW / geometry.width;
-        const sy = imgH / geometry.height;
-        const row = order.rowBoundsPdf;
+        const row = pdfRectToCanvasRect(order.rowBoundsPdf, geometry, imgW, imgH);
+        if (!geometry || !row) return;
         const color = `hsl(${(index * 71) % 360} 85% 42%)`;
         ctx.strokeStyle = color;
         ctx.lineWidth = Math.max(3, imgW / 700);
-        ctx.strokeRect(row.x0 * sx, row.y0 * sy, (row.x1 - row.x0) * sx, (row.y1 - row.y0) * sy);
+        ctx.strokeRect(row.x0, row.y0, row.x1 - row.x0, row.y1 - row.y0);
         ctx.fillStyle = color;
         ctx.font = `bold ${Math.max(14, imgW / 75)}px sans-serif`;
-        ctx.fillText('صف ' + order.rowIndex + (order.rowBoundsUncertain ? ' ؟' : ''), row.x0 * sx + 3, Math.max(16, row.y0 * sy + 18));
+        ctx.fillText('صف ' + order.rowIndex + (order.rowBoundsUncertain ? ' ؟' : ''), row.x0 + 3, Math.max(16, row.y0 + 18));
         (order.cellBoundsPdf || []).forEach(cell => {
           ctx.lineWidth = Math.max(1, imgW / 1600);
-          ctx.strokeRect(cell.x0 * sx, cell.y0 * sy, (cell.x1 - cell.x0) * sx, (cell.y1 - cell.y0) * sy);
+          const cellRect = pdfRectToCanvasRect(cell, geometry, imgW, imgH);
+          if (!cellRect) return;
+          ctx.strokeRect(cellRect.x0, cellRect.y0, cellRect.x1 - cellRect.x0, cellRect.y1 - cellRect.y0);
           ctx.fillStyle = color;
           ctx.font = `bold ${Math.max(10, imgW / 110)}px sans-serif`;
-          ctx.fillText(fieldLabels[cell.field] || cell.field, cell.x0 * sx + 3, cell.y0 * sy + Math.max(12, imgW / 100));
+          ctx.fillText(fieldLabels[cell.field] || cell.field, cellRect.x0 + 3, cellRect.y0 + Math.max(12, imgW / 100));
         });
       });
 
@@ -1856,6 +1925,7 @@
       status.textContent = `الملف: ${state.sheetName} — الصفحة ${pageNum} — ${pageOrders.length} صفًا؛ علامة (؟) تعني أن حد الصف مستنتج ويحتاج مراجعة.` +
         (pageWarning ? ` تحذير الصفحة: ${pageWarning.message}` : '');
       rowsBox.innerHTML = pageOrders.map(order => {
+        const rowBox = order.rowBoundsPdf;
         const fields = [
           ['رقم الطلبية', order.order_no],
           ['رقم الكوبون', order.coupon],
@@ -1869,8 +1939,16 @@
         ];
         return `<div class="rounded-xl border p-3">
           <div class="font-black">صف ${order.rowIndex} · ${escapeHtml(order.recordId || '')}${order.rowBoundsUncertain ? ' · حدود غير مؤكدة' : ''}</div>
+          ${rowBox ? `<div class="opacity-70">حدود PDF: x ${rowBox.x0.toFixed(2)}–${rowBox.x1.toFixed(2)} · y ${rowBox.y0.toFixed(2)}–${rowBox.y1.toFixed(2)} · دوران ${order.pageGeometry.rotation}°</div>` : ''}
           <div class="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1">
-            ${fields.map(([label, value]) => `<div><strong>${label}:</strong> ${escapeHtml(value == null ? '' : value)}</div>`).join('')}
+            ${fields.map(([label, value], fieldIndex) => {
+              const field = ['order_no', 'coupon', 'company', 'merchant', 'recipient', 'phone', 'total', 'area', 'notes'][fieldIndex];
+              const evidence = order.cellTextEvidence && order.cellTextEvidence[field] || [];
+              const points = evidence.map(item =>
+                `${escapeHtml(item.text)} @PDF(${Number(item.pdfX).toFixed(1)}, ${Number(item.pdfY).toFixed(1)})`
+              ).join(' · ');
+              return `<div><strong>${label}:</strong> ${escapeHtml(value == null ? '' : value)}${points ? `<div class="opacity-70">المصدر: ${points}</div>` : ''}</div>`;
+            }).join('')}
           </div>
         </div>`;
       }).join('');
@@ -3715,6 +3793,44 @@
               rows[0].rowBoundsUncertain);
           })(),
           detail: 'عند غياب حدود الصف لا تُنقل بيانات من بقية الصفحة إلى السجل، ويُحظر واتساب.'
+        },
+        {
+          name: '17. تحويل مستطيل PDF الأصلي عند تدوير الصفحة',
+          sample: 'تحويل PDF → viewport → canvas بمقياس 1.5 وتدوير 90°',
+          passed: (() => {
+            const pdfRect = { x0: 10, y0: 20, x1: 30, y1: 40 };
+            const viewportTransform = [0, 1, 1, 0, 100, 0];
+            const viewportRect = { x0: 120, y0: 10, x1: 140, y1: 30 };
+            const restored = viewportRectToPdfRect(
+              viewportRect.x0, viewportRect.y0, viewportRect.x1, viewportRect.y1, viewportTransform
+            );
+            const canvasRect = pdfRectToCanvasRect(pdfRect, {
+              renderTransform: [0, 1.5, 1.5, 0, 150, 0],
+              renderViewportWidth: 450,
+              renderViewportHeight: 150
+            }, 450, 150);
+            return Boolean(restored && Math.abs(restored.x0 - pdfRect.x0) < 0.001 &&
+              Math.abs(restored.y1 - pdfRect.y1) < 0.001 && canvasRect &&
+              canvasRect.x0 === 180 && canvasRect.y0 === 15 &&
+              canvasRect.x1 === 210 && canvasRect.y1 === 45);
+          })(),
+          detail: 'تُحفظ الحدود في إحداثيات PDF الأصلية ثم تُسقط على أبعاد Canvas الفعلية.'
+        },
+        {
+          name: '18. ترتيب الكلمات داخل الخلية بالإحداثيات لا بترتيب PDF.js',
+          sample: 'كلمات عربية وإنجليزية بترتيب عناصر معكوس',
+          passed: (() => {
+            const arabic = getPdfCellText([
+              { str: 'ب', x: 20, width: 5, y0: 10, y1: 14, height: 4 },
+              { str: 'ا', x: 80, width: 5, y0: 10, y1: 14, height: 4 }
+            ]);
+            const english = getPdfCellText([
+              { str: 'B', x: 80, width: 5, y0: 20, y1: 24, height: 4 },
+              { str: 'A', x: 20, width: 5, y0: 20, y1: 24, height: 4 }
+            ]);
+            return arabic === 'ا ب' && english === 'A B';
+          })(),
+          detail: 'تُجمع الكلمات داخل الخلية بترتيب خطوطها واتجاهها المكاني، وليس فهرس العنصر.'
         }
       ];
 
@@ -4130,11 +4246,7 @@
           }
         });
 
-        const colTexts = cols.map(bucket => bucket
-          .sort((a, b) => a.idx - b.idx)
-          .map(it => normalizePdfText(it.str))
-          .filter(Boolean)
-          .join(' ')
+        const colTexts = cols.map(bucket => getPdfCellText(bucket)
           .replace(/لا امبا/g, 'امبالا')
           .replace(/\(\s+/g, '(')
           .replace(/\s+\)/g, ')')
@@ -4143,7 +4255,7 @@
         );
 
         const values = {};
-        fieldOrder.forEach((field, slot) => {
+        fieldOrder.forEach(field => {
           values[field] = colTexts[fieldIndexes[field]];
         });
         const notes = values.notes;
@@ -4205,6 +4317,36 @@
           if (!reviewType) reviewType = 'conflict';
         }
 
+        const rowBoundsPdf = viewportRectToPdfRect(
+          activeColBoundsPt[0],
+          y0,
+          activeColBoundsPt[activeColBoundsPt.length - 1],
+          y1,
+          pageGeometry.viewportTransform
+        );
+        const cellBoundsPdf = fieldOrder.map(field => {
+          const index = fieldIndexes[field];
+          const bounds = viewportRectToPdfRect(
+            activeColBoundsPt[index],
+            y0,
+            activeColBoundsPt[index + 1],
+            y1,
+            pageGeometry.viewportTransform
+          );
+          return bounds ? { field, ...bounds } : null;
+        }).filter(Boolean);
+        const cellTextEvidence = {};
+        fieldOrder.forEach(field => {
+          const index = fieldIndexes[field];
+          cellTextEvidence[field] = cols[index].map(item => ({
+            text: item.str,
+            x: item.x,
+            y: item.y,
+            pdfX: item.pdfX,
+            pdfY: item.pdfY
+          }));
+        });
+
         pageOrders.push({
           seq: seqCounter,
           recordId: sourceSessionId + ':' + pageNum + ':' + band.rowIndex + ':' + y0.toFixed(2) + '-' + y1.toFixed(2),
@@ -4225,19 +4367,12 @@
           area: area,
           notes: notes,
           page: pageNum,
-          pageGeometry: { width: pageGeometry.width, height: pageGeometry.height, rotation: pageGeometry.rotation },
-          rowBoundsPdf: { x0: activeColBoundsPt[0], y0, x1: activeColBoundsPt[activeColBoundsPt.length - 1], y1 },
-          cellBoundsPdf: fieldOrder.map(field => {
-            const index = fieldIndexes[field];
-            return {
-              field,
-              x0: activeColBoundsPt[index],
-              x1: activeColBoundsPt[index + 1],
-              y0,
-              y1
-            };
-          }),
-          rowBoundsUncertain: !band.reliable,
+          pageGeometry,
+          rowBoundsViewport: { x0: activeColBoundsPt[0], y0, x1: activeColBoundsPt[activeColBoundsPt.length - 1], y1 },
+          rowBoundsPdf,
+          cellBoundsPdf,
+          cellTextEvidence,
+          rowBoundsUncertain: !band.reliable || !rowBoundsPdf || cellBoundsPdf.length !== 9,
           y0_norm: y0 / pageGeometry.height,
           y1_norm: y1 / pageGeometry.height,
           review_type: reviewType,
@@ -4349,9 +4484,22 @@
           const viewport1 = page.getViewport({ scale: 1.0 });
           const pageHeightPt = viewport1.height;
           const pageWidthPt = viewport1.width;
-          const pageGeometry = { width: pageWidthPt, height: pageHeightPt, rotation: viewport1.rotation };
-          newPageGeometries[pageNum] = pageGeometry;
           const viewport = page.getViewport({ scale: renderScale });
+          const pdfBounds = page.view;
+          const pageGeometry = {
+            width: pageWidthPt,
+            height: pageHeightPt,
+            pdfWidth: Math.abs(pdfBounds[2] - pdfBounds[0]),
+            pdfHeight: Math.abs(pdfBounds[3] - pdfBounds[1]),
+            pdfBounds: pdfBounds.slice(),
+            rotation: viewport1.rotation,
+            viewportTransform: viewport1.transform.slice(),
+            renderTransform: viewport.transform.slice(),
+            renderViewportWidth: viewport.width,
+            renderViewportHeight: viewport.height,
+            renderScale
+          };
+          newPageGeometries[pageNum] = pageGeometry;
           const offCanvas = document.createElement('canvas');
           offCanvas.width = Math.ceil(viewport.width);
           offCanvas.height = Math.ceil(viewport.height);
