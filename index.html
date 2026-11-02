@@ -1139,7 +1139,7 @@
       const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
 
       if (/Android/i.test(ua)) {
-        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
+        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end';
       }
       if (/(iPhone|iPad|iPod)/i.test(ua)) {
         return 'whatsapp://send?' + query;
