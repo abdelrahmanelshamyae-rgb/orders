@@ -684,6 +684,18 @@
       background: rgba(2,7,17,.78) !important;
     }
 
+    body.dark-mode #columnAdjustModal > section {
+      color: #f1f6ff;
+      background: linear-gradient(145deg, rgba(18,34,58,.98), rgba(9,18,34,.99));
+      border-color: rgba(106,164,231,.25);
+    }
+
+    body.dark-mode #columnAdjustControls label,
+    body.dark-mode #columnAdjustPreview {
+      background: rgba(7,16,31,.78);
+      border-color: rgba(107,162,225,.26);
+    }
+
     body.dark-mode #sourceInspectCard {
       color: #f1f6ff !important;
       background: linear-gradient(145deg, rgba(18,34,58,.98), rgba(9,18,34,.99)) !important;
@@ -872,6 +884,9 @@
   </header>
 
   <!-- SECONDARY VIEW: Audit & Visual Review Table Screen -->
+  <div id="pdfPageWarningBanner" class="hidden max-w-4xl mx-auto px-3.5 pt-3">
+    <div class="rounded-2xl p-3 border border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200 text-xs font-bold"></div>
+  </div>
   <section id="auditTopBanner" class="hidden max-w-4xl mx-auto px-3.5 pt-3 pb-1">
     <div id="auditStatusBox" class="rounded-[24px] p-4 border shadow-sm transition-all"></div>
   </section>
@@ -916,6 +931,13 @@
         >
           🔎 تشخيص استخراج PDF
         </button>
+        <button
+          id="openColumnAdjustBtn"
+          type="button"
+          class="text-xs font-bold px-3 py-1.5 rounded-full bg-teal-500/15 text-teal-700 border border-teal-500/35 hover:bg-teal-500/25 transition"
+        >
+          ضبط الأعمدة (اختياري)
+        </button>
       </div>
     </div>
 
@@ -955,6 +977,37 @@
       </div>
     </div>
   </section>
+
+  <div id="columnAdjustModal" class="hidden fixed inset-0 z-[60] bg-stone-950/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <section class="w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-t-[28px] sm:rounded-[28px] p-4 border bg-white dark:bg-slate-900 space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="font-black text-sm">ضبط الأعمدة — اختياري</h2>
+        <button id="closeColumnAdjustBtn" type="button" class="rounded-full px-3 py-1 bg-stone-500/15 font-bold">إغلاق</button>
+      </div>
+      <p id="columnAdjustStatus" class="text-xs font-bold opacity-80">الحدود تبدأ من الاكتشاف التلقائي. عدّل الحد المشترك بين عمودين عند الحاجة فقط.</p>
+      <label class="text-xs font-bold flex items-center gap-2">
+        الصفحة
+        <select id="columnAdjustPageSelect" class="rounded-lg border px-2 py-1"></select>
+      </label>
+      <div id="columnAdjustStage" class="overflow-auto max-h-[55vh] rounded-xl border bg-stone-100 touch-pan-x touch-pan-y">
+        <div id="columnAdjustCanvasWrap" class="relative min-w-full w-fit">
+          <canvas id="columnAdjustCanvas" class="block max-w-none h-auto"></canvas>
+          <div id="columnAdjustGuides" class="absolute inset-0 pointer-events-none"></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2">
+        <button id="columnAdjustZoomOutBtn" type="button" class="w-11 h-11 rounded-xl border font-black" aria-label="تصغير">−</button>
+        <span id="columnAdjustZoomLabel" class="text-xs font-bold num-ltr">100%</span>
+        <button id="columnAdjustZoomInBtn" type="button" class="w-11 h-11 rounded-xl border font-black" aria-label="تكبير">+</button>
+      </div>
+      <div id="columnAdjustControls" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+      <div id="columnAdjustPreview" class="max-h-60 overflow-auto rounded-xl border p-2 text-[11px]"></div>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <button id="resetColumnAdjustBtn" type="button" class="rounded-xl border px-4 py-2 text-xs font-extrabold">استعادة الحدود المكتشفة</button>
+        <button id="reanalyzeColumnAdjustBtn" type="button" class="rounded-xl bg-teal-600 text-white px-4 py-2 text-xs font-extrabold">إعادة التحليل بالحدود الحالية</button>
+      </div>
+    </section>
+  </div>
 
   <!-- PRIMARY VIEW: Sculpted Bento Delivery Ticket Cards -->
   <main id="ordersContainer" class="max-w-2xl mx-auto px-3.5 py-3 space-y-3"></main>
@@ -1128,9 +1181,19 @@
       confirmedSeqs: {},
       waRegStatus: {},
       pageImages: {},
+      pageGeometries: {},
       pageImageSessionId: null,
       activePdfSessionId: null,
       pdfSourceUnavailable: false,
+      currentPdfFile: null,
+      pdfPageWarnings: [],
+      pageAutoColBoundsNorm: {},
+      pageColumnOverridesNorm: {},
+      pageFieldIndexes: {},
+      pageRowBands: {},
+      pageTextItems: {},
+      columnAdjustPage: 1,
+      columnAdjustZoom: 1,
       colBoundsPt: DEFAULT_COL_BOUNDS_PT.slice()
     };
 
@@ -1208,9 +1271,17 @@
       state.waRegStatus = {};
       state.expandedMsgSeqs = {};
       state.pageImages = {};
+      state.pageGeometries = {};
       state.pageImageSessionId = null;
       state.activePdfSessionId = null;
       state.pdfSourceUnavailable = false;
+      state.currentPdfFile = null;
+      state.pdfPageWarnings = [];
+      state.pageAutoColBoundsNorm = {};
+      state.pageColumnOverridesNorm = {};
+      state.pageFieldIndexes = {};
+      state.pageRowBands = {};
+      state.pageTextItems = {};
       state.colBoundsPt = DEFAULT_COL_BOUNDS_PT.slice();
       state.sheetApprovedByUser = false;
       state.mainFilter = 'all';
@@ -1592,6 +1663,7 @@
       const cells = (order.cellBoundsPdf || []).slice().sort((a, b) => a.x0 - b.x0);
       if (labels) {
         labels.innerHTML = cells.map(cell => `<span>${fieldLabels[cell.field] || cell.field}</span>`).join('');
+        labels.style.gridTemplateColumns = cells.map(cell => `${Math.max(1, cell.x1 - cell.x0)}fr`).join(' ');
         labels.classList.toggle('hidden', cells.length !== 9);
       }
       const imgSource = hasCurrentOrderPdfSource(order) ? state.pageImages[pageNum] : null;
@@ -1780,7 +1852,9 @@
         });
       });
 
-      status.textContent = `الملف: ${state.sheetName} — الصفحة ${pageNum} — ${pageOrders.length} صفًا؛ علامة (؟) تعني أن حد الصف مستنتج ويحتاج مراجعة.`;
+      const pageWarning = state.pdfPageWarnings.find(item => item.page === pageNum);
+      status.textContent = `الملف: ${state.sheetName} — الصفحة ${pageNum} — ${pageOrders.length} صفًا؛ علامة (؟) تعني أن حد الصف مستنتج ويحتاج مراجعة.` +
+        (pageWarning ? ` تحذير الصفحة: ${pageWarning.message}` : '');
       rowsBox.innerHTML = pageOrders.map(order => {
         const fields = [
           ['رقم الطلبية', order.order_no],
@@ -1800,6 +1874,176 @@
           </div>
         </div>`;
       }).join('');
+    }
+
+    function getColumnBoundsForPage(pageNum) {
+      return state.pageColumnOverridesNorm[pageNum] ||
+        state.pageAutoColBoundsNorm[pageNum] ||
+        null;
+    }
+
+    function updateColumnAdjustVisualization(options) {
+      const preserveControls = Boolean(options && options.preserveControls);
+      const select = document.getElementById('columnAdjustPageSelect');
+      const canvas = document.getElementById('columnAdjustCanvas');
+      const wrap = document.getElementById('columnAdjustCanvasWrap');
+      const guides = document.getElementById('columnAdjustGuides');
+      const controls = document.getElementById('columnAdjustControls');
+      const preview = document.getElementById('columnAdjustPreview');
+      const status = document.getElementById('columnAdjustStatus');
+      if (!select || !canvas || !wrap || !guides || !controls || !preview || !status) return;
+
+      const pages = Object.keys(state.pageImages).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      const selectedPage = Number(select.value || state.columnAdjustPage);
+      const pageNum = pages.includes(selectedPage) ? selectedPage : pages[0];
+      if (!pageNum) {
+        canvas.width = 1;
+        canvas.height = 1;
+        controls.innerHTML = '';
+        guides.innerHTML = '';
+        preview.textContent = 'ارفع ملف PDF لتظهر معاينة بيانات الصفوف.';
+        status.textContent = 'ارفع ملف PDF أولًا لاكتشاف حدود الأعمدة تلقائيًا.';
+        return;
+      }
+      state.columnAdjustPage = pageNum;
+      select.innerHTML = pages.map(page => `<option value="${page}"${page === pageNum ? ' selected' : ''}>${page}</option>`).join('');
+
+      const source = state.pageImages[pageNum];
+      const imageWidth = source.naturalWidth || source.width;
+      const imageHeight = source.naturalHeight || source.height;
+      const stage = document.getElementById('columnAdjustStage');
+      const fitWidth = Math.max(1, stage.clientWidth - 2);
+      const displayWidth = Math.max(fitWidth, Math.round(imageWidth * Math.min(1, fitWidth / imageWidth) * state.columnAdjustZoom));
+      const displayHeight = Math.round(displayWidth * imageHeight / imageWidth);
+      canvas.width = imageWidth;
+      canvas.height = imageHeight;
+      canvas.style.width = displayWidth + 'px';
+      canvas.style.height = displayHeight + 'px';
+      wrap.style.width = displayWidth + 'px';
+      wrap.style.height = displayHeight + 'px';
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('تعذر تجهيز معاينة ضبط الأعمدة');
+      ctx.drawImage(source, 0, 0, imageWidth, imageHeight);
+
+      const bounds = getColumnBoundsForPage(pageNum);
+      if (!bounds || bounds.length !== 10) {
+        controls.innerHTML = '';
+        guides.innerHTML = '';
+        preview.textContent = 'لا توجد حدود أعمدة صالحة لعرض معاينة بيانات هذه الصفحة.';
+        status.textContent = 'لم يتم اكتشاف تقسيم صالح لهذه الصفحة؛ ستبقى الصفحة للمراجعة دون تعطيل بقية الصفحات.';
+        return;
+      }
+
+      const fieldLabels = {
+        notes: 'ملاحظات',
+        area: 'العنوان',
+        total: 'الإجمالي',
+        phone: 'الهاتف',
+        recipient: 'المرسل إليه',
+        merchant: 'التاجر',
+        company: 'الشركة',
+        coupon: 'الكوبون',
+        order_no: 'رقم الطلبية'
+      };
+      const fieldMap = state.pageFieldIndexes[pageNum];
+      const fieldNames = fieldMap
+        ? Object.entries(fieldMap).sort((a, b) => a[1] - b[1]).map(([field]) => fieldLabels[field] || field)
+        : ['ملاحظات', 'العنوان', 'الإجمالي', 'الهاتف', 'المرسل إليه', 'التاجر', 'الشركة', 'الكوبون', 'رقم الطلبية'];
+      guides.innerHTML = bounds.slice(1, -1).map((position, index) => {
+        const boundaryIndex = index + 1;
+        return `<div data-column-handle="${boundaryIndex}" role="slider" aria-label="الحد بين ${fieldNames[index]} و${fieldNames[index + 1]}" aria-valuenow="${position}" class="absolute top-0 bottom-0 z-10 pointer-events-auto cursor-ew-resize" style="left:${position * 100}%;width:28px;transform:translateX(-50%);touch-action:none">
+          <div class="absolute top-0 bottom-0 left-1/2 border-l-2 border-dashed border-fuchsia-600"></div>
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-14 rounded-full bg-fuchsia-600/90 border-2 border-white shadow-lg"></div>
+        </div>`;
+      }).join('');
+
+      if (!preserveControls) {
+        controls.innerHTML = bounds.slice(1, -1).map((position, index) => {
+          const boundaryIndex = index + 1;
+          const minimum = bounds[boundaryIndex - 1] + 8 / (state.pageGeometries[pageNum]?.width || imageWidth);
+          const maximum = bounds[boundaryIndex + 1] - 8 / (state.pageGeometries[pageNum]?.width || imageWidth);
+          return `<label class="rounded-xl border p-2 text-[11px] font-bold flex items-center gap-2">
+            <span class="min-w-[7rem]">بين ${fieldNames[index]} / ${fieldNames[index + 1]}</span>
+            <input type="range" min="${minimum}" max="${maximum}" step="0.001" value="${position}" data-column-boundary="${boundaryIndex}" ${maximum <= minimum ? 'disabled' : ''} class="w-full min-h-11 accent-fuchsia-600">
+          </label>`;
+        }).join('');
+      } else {
+        controls.querySelectorAll('[data-column-boundary]').forEach(input => {
+          const boundaryIndex = Number(input.getAttribute('data-column-boundary'));
+          input.value = String(bounds[boundaryIndex]);
+        });
+      }
+      status.textContent = state.pageColumnOverridesNorm[pageNum]
+        ? `تعديل اختياري للصفحة ${pageNum}. تحريك الحدود لا يغيّر بيانات الصفحات الأخرى.`
+        : `الحدود المعروضة للصفحة ${pageNum} مكتشفة تلقائيًا. اسحب الخط أو استخدم المنزلق، ثم أعد التحليل إذا لزم.`;
+      renderColumnAdjustPreview(pageNum, bounds);
+    }
+
+    function renderColumnAdjustPreview(pageNum, normalizedBounds) {
+      const preview = document.getElementById('columnAdjustPreview');
+      const geometry = state.pageGeometries[pageNum];
+      const fieldMap = state.pageFieldIndexes[pageNum];
+      const bands = state.pageRowBands[pageNum];
+      const items = state.pageTextItems[pageNum];
+      if (!preview || !geometry || !fieldMap || !bands || !items) {
+        if (preview) preview.textContent = 'لم يتوفر تقسيم موثوق لمعاينة البيانات في هذه الصفحة.';
+        return;
+      }
+      const bounds = normalizedBounds.map(position => position * geometry.width);
+      const orders = extractRowsFromBands(
+        bands,
+        items,
+        bounds,
+        fieldMap,
+        pageNum,
+        geometry,
+        1,
+        state.activePdfSessionId
+      );
+      if (!orders.length) {
+        preview.textContent = 'لا توجد صفوف طلبيات لمعاينتها في هذه الصفحة.';
+        return;
+      }
+      preview.innerHTML = `<strong>معاينة مباشرة — ${orders.length} صفًا في الصفحة ${pageNum}</strong>
+        <div class="overflow-x-auto mt-2">
+          <table class="w-full text-right border-collapse">
+            <thead><tr class="border-b">
+              <th class="p-1">الطلبية</th><th class="p-1">التاجر</th><th class="p-1">الهاتف</th>
+              <th class="p-1">الإجمالي</th><th class="p-1">العنوان</th>
+            </tr></thead>
+            <tbody>${orders.slice(0, 12).map(order => `<tr class="border-b border-stone-300/50">
+              <td class="p-1">${escapeHtml(order.order_no)}</td>
+              <td class="p-1">${escapeHtml(order.merchant)}</td>
+              <td class="p-1" dir="ltr">${escapeHtml(order.phone)}</td>
+              <td class="p-1">${escapeHtml(order.total)}</td>
+              <td class="p-1">${escapeHtml(order.area)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function setColumnBoundary(pageNum, boundaryIndex, value) {
+      const current = getColumnBoundsForPage(pageNum);
+      if (!current || boundaryIndex < 1 || boundaryIndex > 8) return;
+      const pageWidth = Number(state.pageGeometries[pageNum] && state.pageGeometries[pageNum].width);
+      const minimumGap = pageWidth > 0 ? 8 / pageWidth : 0.01;
+      const next = current.slice();
+      next[boundaryIndex] = Math.max(
+        next[boundaryIndex - 1] + minimumGap,
+        Math.min(next[boundaryIndex + 1] - minimumGap, Number(value))
+      );
+      state.pageColumnOverridesNorm[pageNum] = next;
+      updateColumnAdjustVisualization({ preserveControls: true });
+    }
+
+    function openColumnAdjuster() {
+      if (!state.currentPdfFile || !state.activePdfSessionId) {
+        showToast('ارفع ملف PDF أولًا؛ ضبط الأعمدة أداة اختيارية بعد الاكتشاف التلقائي');
+        return;
+      }
+      const modal = document.getElementById('columnAdjustModal');
+      modal.classList.remove('hidden');
+      requestAnimationFrame(updateColumnAdjustVisualization);
     }
 
     function escapeHtml(str) {
@@ -2791,6 +3035,14 @@
       applyThemeUI();
       updateHeaderSummaryAndPills();
       renderAuditBanner();
+      const warningBanner = document.getElementById('pdfPageWarningBanner');
+      if (warningBanner) {
+        warningBanner.classList.toggle('hidden', state.pdfPageWarnings.length === 0);
+        warningBanner.firstElementChild.textContent = state.pdfPageWarnings.length
+          ? 'تم استخراج الصفحات السليمة. تحتاج الصفحات التالية إلى المراجعة فقط: ' +
+            state.pdfPageWarnings.map(item => item.page ? `صفحة ${item.page}: ${item.message}` : item.message).join('؛ ')
+          : '';
+      }
 
       const auditBanner = document.getElementById('auditTopBanner');
       const reviewView = document.getElementById('reviewScreenView');
@@ -3166,6 +3418,63 @@
       if (isOpening) renderPdfDiagnostics();
     });
     document.getElementById('pdfDiagnosticsPageSelect').addEventListener('change', renderPdfDiagnostics);
+    document.getElementById('openColumnAdjustBtn').addEventListener('click', openColumnAdjuster);
+    document.getElementById('closeColumnAdjustBtn').addEventListener('click', function() {
+      document.getElementById('columnAdjustModal').classList.add('hidden');
+    });
+    document.getElementById('columnAdjustPageSelect').addEventListener('change', updateColumnAdjustVisualization);
+    document.getElementById('columnAdjustZoomOutBtn').addEventListener('click', function() {
+      state.columnAdjustZoom = Math.max(1, Number((state.columnAdjustZoom - 0.15).toFixed(2)));
+      document.getElementById('columnAdjustZoomLabel').textContent = Math.round(state.columnAdjustZoom * 100) + '%';
+      updateColumnAdjustVisualization();
+    });
+    document.getElementById('columnAdjustZoomInBtn').addEventListener('click', function() {
+      state.columnAdjustZoom = Math.min(2.5, Number((state.columnAdjustZoom + 0.15).toFixed(2)));
+      document.getElementById('columnAdjustZoomLabel').textContent = Math.round(state.columnAdjustZoom * 100) + '%';
+      updateColumnAdjustVisualization();
+    });
+    document.getElementById('columnAdjustControls').addEventListener('input', function(event) {
+      const input = event.target.closest('[data-column-boundary]');
+      if (!input) return;
+      setColumnBoundary(state.columnAdjustPage, Number(input.dataset.columnBoundary), Number(input.value));
+    });
+    document.getElementById('columnAdjustStage').addEventListener('pointerdown', function(event) {
+      const handle = event.target.closest('[data-column-handle]');
+      if (!handle) return;
+      event.preventDefault();
+      this.setPointerCapture(event.pointerId);
+      state.draggingColumnBoundary = Number(handle.dataset.columnHandle);
+      state.draggingColumnPointerId = event.pointerId;
+    });
+    document.getElementById('columnAdjustStage').addEventListener('pointermove', function(event) {
+      if (state.draggingColumnBoundary === undefined || event.pointerId !== state.draggingColumnPointerId) return;
+      const rect = document.getElementById('columnAdjustCanvasWrap').getBoundingClientRect();
+      if (!rect.width) return;
+      setColumnBoundary(state.columnAdjustPage, state.draggingColumnBoundary, (event.clientX - rect.left) / rect.width);
+    });
+    document.getElementById('columnAdjustStage').addEventListener('pointerup', function(event) {
+      if (event.pointerId === state.draggingColumnPointerId) {
+        state.draggingColumnBoundary = undefined;
+        state.draggingColumnPointerId = undefined;
+      }
+    });
+    document.getElementById('columnAdjustStage').addEventListener('pointercancel', function() {
+      state.draggingColumnBoundary = undefined;
+      state.draggingColumnPointerId = undefined;
+    });
+    document.getElementById('resetColumnAdjustBtn').addEventListener('click', function() {
+      delete state.pageColumnOverridesNorm[state.columnAdjustPage];
+      updateColumnAdjustVisualization();
+    });
+    document.getElementById('reanalyzeColumnAdjustBtn').addEventListener('click', async function() {
+      if (!state.currentPdfFile) {
+        showToast('لا يوجد ملف PDF لإعادة تحليله');
+        return;
+      }
+      const file = state.currentPdfFile;
+      document.getElementById('columnAdjustModal').classList.add('hidden');
+      await handlePdfUploadEvent({ target: { files: [file], value: '' } });
+    });
 
     // Primary Orders List Event Delegation
     document.getElementById('ordersContainer').addEventListener('click', function(e) {
@@ -3334,11 +3643,11 @@
               ['اسم التاجر', 'merchant'], ['المرسل إليه', 'recipient'], ['رقم الهاتف', 'phone'],
               ['الإجمالي', 'total'], ['العنوان', 'area'], ['ملاحظات', 'notes']
             ];
-            const headers = labels.map(([str], index) => ({ str, x: index * 10 + 2, width: 6, y: 10 }));
+            const headers = labels.map(([str], index) => ({ str, x: index * 10 + 2, width: 6, y: 55 }));
             const map = detectPdfColumnFieldMap(headers, Array.from({ length: 10 }, (_, index) => index * 10), 100);
             return Boolean(map && map.order_no === 0 && map.notes === 8 && map.phone === 5);
           })(),
-          detail: 'تم تعيين الحقول بحسب عناوينها داخل حدود الأعمدة بدل افتراض مواقع ثابتة.'
+          detail: 'تم تعيين الحقول من عناوين تقع في منتصف الصفحة، دون افتراض أنها في أعلى 22% منها.'
         },
         {
           name: '12. تحويل إحداثيات نص PDF مع تدوير الصفحة',
@@ -3549,7 +3858,6 @@
       const candidates = Object.entries(PDF_HEADER_ALIASES).map(([field, aliases]) => ({
         field,
         items: items.filter(item =>
-          item.y <= pageHeightPt * 0.22 &&
           aliases.some(alias => normalizedHeaderToken(item.str).includes(alias))
         )
       }));
@@ -3627,6 +3935,31 @@
       })).filter(a => /\d/.test(a.text));
     }
 
+    function findPdfSummaryStartY(items, pageHeightPt) {
+      const summaryTokens = [
+        'اجماليالطلبيات',
+        'اجماليالكشف',
+        'قيمةالمسلم',
+        'صافيالاجمالي',
+        'العمولة'
+      ];
+      const lines = [];
+      items.filter(item => item.y >= pageHeightPt * 0.35).slice().sort((a, b) => a.y - b.y).forEach(item => {
+        const line = lines[lines.length - 1];
+        if (line && Math.abs(item.y - line.y) <= 6) {
+          line.items.push(item);
+          line.y = line.items.reduce((sum, entry) => sum + entry.y, 0) / line.items.length;
+        } else {
+          lines.push({ y: item.y, items: [item] });
+        }
+      });
+      const matchingLine = lines.find(line => {
+        const text = line.items.map(item => normalizedHeaderToken(item.str)).join('');
+        return summaryTokens.some(token => text.includes(token));
+      });
+      return matchingLine ? matchingLine.y : null;
+    }
+
     function medianNumber(values) {
       if (!values.length) return 24;
       const sorted = values.slice().sort((a, b) => a - b);
@@ -3638,7 +3971,9 @@
     // Grid lines refine the crop; missing/interrupted lines fall back to the neighboring order anchors.
     function buildOrderRowBands(hLinesPt, items, colBoundsPt, pageHeightPt, orderColumnIndex) {
       const sortedLines = (hLinesPt || []).filter(y => Number.isFinite(y)).sort((a, b) => a - b);
+      const summaryStartY = findPdfSummaryStartY(items, pageHeightPt);
       let anchors = getNumericOrderAnchors(items, colBoundsPt, orderColumnIndex);
+      if (summaryStartY !== null) anchors = anchors.filter(anchor => anchor.y < summaryStartY);
       if (sortedLines.length >= 2) {
         anchors = anchors.filter(anchor => anchor.y > sortedLines[0] && anchor.y < sortedLines[sortedLines.length - 1]);
       }
@@ -3695,7 +4030,7 @@
         }
         let isolatedAnchorOnly = false;
         const maxFallbackHeight = Math.min(pageHeightPt * 0.08, typicalGap * 2.5);
-        if (!reliable && y1 - y0 > maxFallbackHeight) {
+        if (!reliable && (anchors.length === 1 || y1 - y0 > maxFallbackHeight)) {
           y0 = Math.max(0, anchor.y - 12);
           y1 = Math.min(pageHeightPt, anchor.y + 12);
           isolatedAnchorOnly = true;
@@ -3984,6 +4319,14 @@
 
         const extractedOrders = [];
         const newPageImages = {};
+        const newPageGeometries = {};
+        const newPageAutoBoundsNorm = {};
+        const newPageFieldIndexes = {};
+        const newPageRowBands = {};
+        const newPageTextItems = {};
+        const pageWarnings = [];
+        const isReanalyzingSameFile = state.currentPdfFile === file;
+        if (!isReanalyzingSameFile) state.pageColumnOverridesNorm = {};
         const pdfSessionId = (window.crypto && typeof window.crypto.randomUUID === 'function')
           ? window.crypto.randomUUID()
           : 'pdf-' + Date.now() + '-' + Math.random().toString(36).slice(2);
@@ -4000,11 +4343,14 @@
         const renderScale = (isSmallScreen || lowMemoryDevice) ? 1.2 : 1.45;
 
         for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-          const page = await pdfDocument.getPage(pageNum);
+          let page = null;
+          try {
+          page = await pdfDocument.getPage(pageNum);
           const viewport1 = page.getViewport({ scale: 1.0 });
           const pageHeightPt = viewport1.height;
           const pageWidthPt = viewport1.width;
           const pageGeometry = { width: pageWidthPt, height: pageHeightPt, rotation: viewport1.rotation };
+          newPageGeometries[pageNum] = pageGeometry;
           const viewport = page.getViewport({ scale: renderScale });
           const offCanvas = document.createElement('canvas');
           offCanvas.width = Math.ceil(viewport.width);
@@ -4018,6 +4364,7 @@
           const items = textContent.items
             .map((it, idx) => mapPdfTextItemToViewport(it, idx, viewport1))
             .filter(it => it.str.length > 0);
+          newPageTextItems[pageNum] = items;
 
           const grid = detectTableGridFromRenderedCanvas(
             offCanvas,
@@ -4036,24 +4383,41 @@
             pageColBoundsPt = sharedColBoundsNorm.map(x => x * pageWidthPt);
           }
           if (!pageColBoundsPt || pageColBoundsPt.length !== 10) {
-            throw new Error('تعذر تحديد تقسيم الأعمدة بأمان في الصفحة ' + pageNum + '؛ لم يتم تخمين ترتيب الحقول');
+            pageWarnings.push({ page: pageNum, message: 'تعذر اكتشاف حدود الأعمدة تلقائيًا؛ لم تُسند بيانات بالتخمين.' });
+            continue;
           }
           pageColBoundsPt = pageColBoundsPt.map(Number).sort((a, b) => a - b);
+          const autoBoundsNorm = pageColBoundsPt.map(x => x / pageWidthPt);
+          newPageAutoBoundsNorm[pageNum] = autoBoundsNorm.slice();
+          const overrideBounds = isReanalyzingSameFile && state.pageColumnOverridesNorm[pageNum];
+          if (overrideBounds && overrideBounds.length === 10) {
+            pageColBoundsPt = overrideBounds.map(x => x * pageWidthPt);
+          }
+          if (pageColBoundsPt.some((bound, index) =>
+            !Number.isFinite(bound) || bound < 0 || bound > pageWidthPt ||
+            (index > 0 && bound <= pageColBoundsPt[index - 1])
+          )) {
+            pageWarnings.push({ page: pageNum, message: 'تقسيم الأعمدة غير صالح؛ تُركت الصفحة للمراجعة.' });
+            continue;
+          }
           const detectedFieldIndexes = detectPdfColumnFieldMap(items, pageColBoundsPt, pageHeightPt);
           if (!detectedFieldIndexes && sharedFieldIndexes && grid.vLinesPt && sharedColBoundsNorm) {
-            const changedLayout = pageColBoundsPt.some((bound, index) =>
-              Math.abs(bound / pageWidthPt - sharedColBoundsNorm[index]) > 0.015);
+            const changedLayout = autoBoundsNorm.some((bound, index) =>
+              Math.abs(bound - sharedColBoundsNorm[index]) > 0.025);
             if (changedLayout) {
-              throw new Error('تخطيط الأعمدة تغيّر في الصفحة ' + pageNum + ' ولا توجد عناوين لتأكيد أسماء الأعمدة؛ أوقفنا تحليل هذه الصفحة بدل ربطها بتخطيط سابق');
+              pageWarnings.push({ page: pageNum, message: 'يبدو أن تخطيط الأعمدة مختلف ولا توجد عناوين كافية لتأكيد الربط؛ تُركت الصفحة للمراجعة.' });
+              continue;
             }
           }
           const pageFieldIndexes = detectedFieldIndexes || sharedFieldIndexes;
           if (!pageFieldIndexes) {
-            throw new Error('تعذر ربط عناوين الأعمدة في الصفحة ' + pageNum + '؛ أوقفنا الاستخراج بدل تخمين مواضع البيانات');
+            pageWarnings.push({ page: pageNum, message: 'تعذر تحديد أسماء الأعمدة؛ لم تُسند بيانات بالتخمين.' });
+            continue;
           }
           if (detectedFieldIndexes) sharedFieldIndexes = detectedFieldIndexes;
-          sharedColBoundsNorm = pageColBoundsPt.map(x => x / pageWidthPt);
-          if (pageNum === 1) firstPageColBoundsPt = pageColBoundsPt.slice();
+          newPageFieldIndexes[pageNum] = pageFieldIndexes;
+          sharedColBoundsNorm = autoBoundsNorm;
+          if (!firstPageColBoundsPt) firstPageColBoundsPt = pageColBoundsPt.slice();
 
           const rowBands = buildOrderRowBands(
             grid.hLinesPt,
@@ -4062,6 +4426,7 @@
             pageHeightPt,
             pageFieldIndexes.order_no
           );
+          newPageRowBands[pageNum] = rowBands;
           const pageOrders = extractRowsFromBands(
             rowBands,
             items,
@@ -4074,6 +4439,9 @@
           );
           pageOrders.forEach(order => extractedOrders.push(order));
           seqCounter += pageOrders.length;
+          if (!pageOrders.length) {
+            pageWarnings.push({ page: pageNum, message: 'لم يُعثر على صفوف طلبيات موثوقة في هذه الصفحة.' });
+          }
 
           if (declaredCount === null) {
             const countValue = extractDeclaredValueNearLabel(items, text => text.includes('اجمالي') && text.includes('الطلبيات'), pageHeightPt);
@@ -4084,15 +4452,28 @@
             if (totalValue !== null && totalValue >= 0) declaredTotal = totalValue;
           }
 
-          if (typeof page.cleanup === 'function') page.cleanup();
-        }
-
-        if (extractedOrders.length === 0) {
-          throw new Error('لم يتم العثور على طلبيات قابلة للاستخراج. قد يكون الكشف صورة ممسوحة أو بتنسيق مختلف عن الجدول المدعوم');
+          } catch (pageError) {
+            pageWarnings.push({
+              page: pageNum,
+              message: pageError && pageError.message ? pageError.message : 'تعذر تحليل هذه الصفحة'
+            });
+          } finally {
+            if (page && typeof page.cleanup === 'function') {
+              try {
+                page.cleanup();
+              } catch (cleanupError) {
+                pageWarnings.push({ page: pageNum, message: 'تعذر تحرير موارد الصفحة بعد القراءة.' });
+              }
+            }
+          }
         }
 
         // Release the PDF.js document after rendering; the page canvases remain available for review.
-        await pdfDocument.destroy();
+        try {
+          await pdfDocument.destroy();
+        } catch (documentCleanupError) {
+          pageWarnings.push({ page: 0, message: 'تعذر تحرير موارد ملف PDF بعد اكتمال القراءة.' });
+        }
         pdfDocument = null;
 
         ORDERS_DATA = extractedOrders;
@@ -4100,9 +4481,16 @@
         state.declaredOrderCount = declaredCount;
         state.declaredTotalAmount = declaredTotal;
         state.pageImages = newPageImages;
+        state.pageGeometries = newPageGeometries;
+        state.pageFieldIndexes = newPageFieldIndexes;
+        state.pageRowBands = newPageRowBands;
+        state.pageTextItems = newPageTextItems;
         state.pageImageSessionId = pdfSessionId;
         state.activePdfSessionId = pdfSessionId;
         state.pdfSourceUnavailable = false;
+        state.currentPdfFile = file;
+        state.pdfPageWarnings = pageWarnings;
+        state.pageAutoColBoundsNorm = newPageAutoBoundsNorm;
         state.colBoundsPt = firstPageColBoundsPt;
         state.contactedSeqs = {};
         state.cancelledSeqs = {};
@@ -4121,8 +4509,15 @@
 
         savePersistentState();
         renderApp();
+        if (!document.getElementById('columnAdjustModal').classList.contains('hidden')) {
+          updateColumnAdjustVisualization();
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        showToast('تم استخراج ' + extractedOrders.length + ' طلبية من ' + (file.name || 'ملف PDF') + ' ✓');
+        showToast(extractedOrders.length
+          ? pageWarnings.length
+            ? `تم استخراج ${extractedOrders.length} طلبية؛ ${pageWarnings.length} صفحة تحتاج مراجعة`
+            : 'تم استخراج ' + extractedOrders.length + ' طلبية من ' + (file.name || 'ملف PDF') + ' ✓'
+          : `لم تُستخرج طلبيات آمنة من ${file.name || 'الملف'}؛ يمكنك ضبط الأعمدة اختياريًا وإعادة التحليل`);
       } catch (err) {
         const message = err && err.message ? err.message : 'حدث خطأ غير معروف';
         showToast('تعذر قراءة الكشف: ' + message);
