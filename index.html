@@ -352,6 +352,22 @@
       border-color: rgba(113, 153, 221, .19) !important;
       box-shadow: 0 16px 38px rgba(0,0,0,.30), inset 0 1px 0 rgba(185,211,255,.07) !important;
     }
+    body.dark-mode .ticket-card:has([data-action="toggle-contacted"][aria-pressed="true"]):not(:has([data-action="toggle-cancelled"][aria-pressed="true"])) {
+      border-color: rgba(55,216,190,.78) !important;
+      box-shadow: 0 0 0 1px rgba(55,216,190,.30),
+                  0 0 22px rgba(36,218,190,.28),
+                  0 0 48px rgba(36,218,190,.14),
+                  0 16px 38px rgba(0,0,0,.30),
+                  inset 0 1px 0 rgba(185,255,239,.12) !important;
+    }
+    body.dark-mode .ticket-card:has([data-action="toggle-cancelled"][aria-pressed="true"]) {
+      border-color: rgba(255,91,117,.82) !important;
+      box-shadow: 0 0 0 1px rgba(255,91,117,.34),
+                  0 0 22px rgba(255,54,91,.30),
+                  0 0 48px rgba(255,54,91,.16),
+                  0 16px 38px rgba(0,0,0,.34),
+                  inset 0 1px 0 rgba(255,199,208,.10) !important;
+    }
     .ticket-card h2 { color: var(--text-primary) !important; font-size: 18px !important; font-weight: 900 !important; }
     .ticket-card p, .ticket-card small { color: var(--text-secondary); }
     .ticket-card > div:nth-of-type(2) {
@@ -1244,8 +1260,11 @@
       const raw = normalizePdfText(rawCellStr);
       if (!raw) return { phones: [], ambiguousConcat: false, raw };
 
-      const parts = raw
-        .split(/[\r\n\/|،,;]+|(?:\s+-\s+)|(?:(?<=\d{7,12})\s*-\s*(?=\d{7,12}))|(?:(?<=\d{7,12})\s+(?=\d{7,12}))/)
+      const splitReady = raw
+        .replace(/(\d{7,12})\s*-\s*(?=\d{7,12})/g, '$1\u0001')
+        .replace(/(\d{7,12})\s+(?=\d{7,12})/g, '$1\u0001');
+      const parts = splitReady
+        .split(/[\r\n\u0001\/|،,;]+|\s+-\s+/)
         .map(p => p.trim())
         .filter(Boolean);
 
@@ -1352,7 +1371,10 @@
     function evaluateSheetSummaryAudit() {
       const extractedCount = ORDERS_DATA.length;
       const calculatedTotal = ORDERS_DATA.reduce((acc, o) => acc + (Number(o.total) || 0), 0);
-      const paidCount = ORDERS_DATA.filter(o => Number(o.total) === 0).length;
+      const paidCount = ORDERS_DATA.filter(o => {
+        const total = String(o.total == null ? '' : o.total).trim();
+        return total !== '' && Number(total) === 0;
+      }).length;
       const unpaidCount = extractedCount - paidCount;
 
       const countMatches = state.declaredOrderCount === null || extractedCount === state.declaredOrderCount;
@@ -1519,6 +1541,7 @@
       canvasEl.width = imgW;
       canvasEl.height = imgH;
       const ctx = canvasEl.getContext('2d');
+      if (!ctx) return;
       ctx.drawImage(imgSource, 0, 0);
 
       const sy = Math.floor((order.y0_norm || 0.1) * imgH);
@@ -1977,7 +2000,7 @@
             </td>
             <td class="py-2.5 px-2.5">${merchantCellHtml}</td>
             <td class="py-2.5 px-2.5">${phonesHtml}</td>
-            <td class="py-2.5 px-2.5 font-extrabold num-ltr">${order.total} د.إ</td>
+            <td class="py-2.5 px-2.5 font-extrabold num-ltr">${escapeHtml(String(order.total))} د.إ</td>
             <td class="py-2.5 px-2.5 font-bold">${escapeHtml(order.area)}</td>
             <td class="py-2.5 px-2.5 text-[11px] max-w-[160px] break-words">${order.notes ? escapeHtml(order.notes) : '<span class="opacity-40">-</span>'}</td>
             <td class="py-2.5 px-2.5">
@@ -2444,7 +2467,7 @@
               }">
                 <div class="text-[10px] font-extrabold opacity-80">${isPaid ? 'مدفوعة' : 'الإجمالي'}</div>
                 <div class="text-base sm:text-lg font-black num-ltr leading-tight">
-                  ${order.total} <span class="text-[10px] font-extrabold">د.إ</span>
+                  ${escapeHtml(String(order.total))} <span class="text-[10px] font-extrabold">د.إ</span>
                 </div>
               </div>
             </div>
@@ -2479,6 +2502,7 @@
                   type="button"
                   data-action="toggle-contacted"
                   data-seq="${order.seq}"
+                  aria-pressed="${isContacted ? 'true' : 'false'}"
                   class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold transition ${
                     isContacted
                       ? (isDark ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40' : 'bg-[#E3F4EF] text-[#0D6359] border border-[#B8E2D6]')
