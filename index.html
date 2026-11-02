@@ -459,6 +459,22 @@
       body.dark-mode .ticket-card { padding: 14px !important; }
       body.dark-mode .ticket-card [data-action="open-wa"] { padding-inline: 12px !important; }
     }
+
+    .ticket-card:has([data-action="toggle-contacted"] > span.bg-teal-600) {
+      border-color: rgba(52, 211, 153, .88) !important;
+      box-shadow: 0 0 0 1px rgba(52, 211, 153, .42),
+        0 0 16px rgba(16, 185, 129, .42),
+        0 0 34px rgba(16, 185, 129, .20),
+        0 14px 34px rgba(0, 0, 0, .30) !important;
+    }
+
+    .ticket-card:has([data-action="toggle-cancelled"][aria-pressed="true"]) {
+      border-color: rgba(251, 113, 133, .92) !important;
+      box-shadow: 0 0 0 1px rgba(251, 113, 133, .48),
+        0 0 16px rgba(244, 63, 94, .46),
+        0 0 34px rgba(244, 63, 94, .22),
+        0 14px 34px rgba(0, 0, 0, .30) !important;
+    }
   </style>
 </head>
 <body class="min-h-screen">
