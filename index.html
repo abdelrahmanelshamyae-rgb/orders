@@ -1131,21 +1131,11 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open regular WhatsApp on mobile; use WhatsApp Web on desktop.
+    // Keep WhatsApp links in the browser instead of invoking a mobile-app scheme.
     function buildWhatsAppUrl(phone, message) {
       const encodedMessage = encodeURIComponent(message || '');
       const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
-      const query = 'phone=' + cleanPhone + '&text=' + encodedMessage;
-      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
-
-      if (/Android/i.test(ua)) {
-        return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
-      }
-      if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        return 'whatsapp://send?' + query;
-      }
-
-      return 'https://web.whatsapp.com/send?' + query;
+      return 'https://web.whatsapp.com/send?phone=' + cleanPhone + '&text=' + encodedMessage;
     }
 
     function buildWhatsAppMessage(order) {
