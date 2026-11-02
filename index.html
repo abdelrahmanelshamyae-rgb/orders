@@ -1142,10 +1142,15 @@
         return 'intent://send?' + query + '#Intent;scheme=whatsapp;package=com.whatsapp;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end';
       }
       if (/(iPhone|iPad|iPod)/i.test(ua)) {
-        return 'whatsapp://send?' + query;
+        return 'https://wa.me/' + cleanPhone + '?text=' + encodedMessage;
       }
 
       return 'https://web.whatsapp.com/send?' + query;
+    }
+
+    function getWhatsAppLinkTarget() {
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+      return /(iPhone|iPad|iPod)/i.test(ua) ? '_self' : '_blank';
     }
 
     function buildWhatsAppMessage(order) {
@@ -2055,7 +2060,7 @@
               </button>
               <a
                 href="${escapeHtml(primaryWaUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -2093,7 +2098,7 @@
             return `
               <a
                 href="${escapeHtml(waUrl)}"
-                target="_blank"
+                target="${getWhatsAppLinkTarget()}"
                 rel="noopener noreferrer"
                 data-action="open-wa"
                 data-seq="${order.seq}"
@@ -2393,7 +2398,7 @@
         return `
           <a
             href="${escapeHtml(waUrl)}"
-            target="_blank"
+            target="${getWhatsAppLinkTarget()}"
             rel="noopener noreferrer"
             data-modal-open-wa="${escapeHtml(pInfo.intl)}"
             class="flex-1 min-w-[140px] py-2.5 px-4 rounded-full wa-btn-glow text-white font-black text-xs text-center no-underline"
