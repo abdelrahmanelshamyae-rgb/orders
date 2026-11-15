@@ -1131,7 +1131,7 @@
       return /(?:احضار|إحضار|أحضار)/.test(notesText);
     }
 
-    // Open the regular WhatsApp app directly on mobile devices.
+    // Open the installed WhatsApp app on Windows and mobile devices.
     function buildWhatsAppUrl(phone, message) {
       const encodedMessage = encodeURIComponent(message || '');
       const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
@@ -1144,13 +1144,16 @@
       if (/(iPhone|iPad|iPod)/i.test(ua)) {
         return 'https://wa.me/' + cleanPhone + '?text=' + encodedMessage;
       }
+      if (/Windows/i.test(ua)) {
+        return 'whatsapp://send?' + query;
+      }
 
       return 'https://web.whatsapp.com/send?' + query;
     }
 
     function getWhatsAppLinkTarget() {
       const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
-      return /(iPhone|iPad|iPod)/i.test(ua) ? '_self' : '_blank';
+      return /(iPhone|iPad|iPod|Windows)/i.test(ua) ? '_self' : '_blank';
     }
 
     function buildWhatsAppMessage(order) {
